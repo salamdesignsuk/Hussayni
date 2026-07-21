@@ -44,7 +44,7 @@ import {
 } from './utils/documentModel';
 
 // Injected globals from Vite define, with safe development fallbacks
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.5.0';
 const BUILD_DATE = typeof __BUILD_DATE__ !== 'undefined' ? __BUILD_DATE__ : '2026-07-16';
 const COMMIT_HASH = typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : 'f0e2d1c';
 const BUILD_ENV = typeof __BUILD_ENV__ !== 'undefined' ? __BUILD_ENV__ : 'development';
@@ -96,7 +96,7 @@ export default function App() {
     const saved = localStorage.getItem('hussayni_preferences');
     const isMobileViewport = typeof window !== 'undefined' && window.innerWidth < 1024;
     const initialDefault = isMobileViewport 
-      ? { ...DEFAULT_PREFERENCES, showLineNumbers: false } 
+      ? { ...DEFAULT_PREFERENCES, showLineNumbers: false, zoom: 50 } 
       : DEFAULT_PREFERENCES;
 
     if (saved) {
@@ -129,6 +129,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [showAbout, setShowAbout] = useState<boolean>(false);
   const [showExportModal, setShowExportModal] = useState<boolean>(false);
+  const [showHowToUse, setShowHowToUse] = useState<boolean>(false);
   const [showRecentMenu, setShowRecentMenu] = useState<boolean>(false);
   const [showFileMenu, setShowFileMenu] = useState<boolean>(false);
   const [isLogCollapsed, setIsLogCollapsed] = useState<boolean>(() => {
@@ -140,6 +141,7 @@ export default function App() {
     onConfirm: () => void;
   } | null>(null);
   const [showPrintToast, setShowPrintToast] = useState<boolean>(false);
+  const [neverShowAgain, setNeverShowAgain] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
   const [isGeneratingOdt, setIsGeneratingOdt] = useState<boolean>(false);
   const [isGeneratingDocx, setIsGeneratingDocx] = useState<boolean>(false);
@@ -358,23 +360,26 @@ export default function App() {
   // Trigger browser A4 vector printing (PDF Export)
   const handleLaunchPrint = () => {
     setShowExportModal(false);
-    setShowPrintToast(true);
-    
-    // Set title to the formatted filename so that native PDF printer defaults to this name
-    const originalTitle = document.title;
-    const hasTimestamp = preferences.includeExportTimestamp !== false;
-    document.title = hasTimestamp 
-      ? `${docName.replace(/\s+/g, '_')}_${getFormattedTimestamp()}` 
-      : docName.replace(/\s+/g, '_');
+    const neverShow = localStorage.getItem('hussayni_never_show_print_toast') === 'true';
 
-    triggerSystemPrint(
-      () => {},
-      () => {
-        setShowPrintToast(false);
-        // Restore title
-        document.title = originalTitle;
-      }
-    );
+    if (neverShow) {
+      // Set title to the formatted filename so that native PDF printer defaults to this name
+      const originalTitle = document.title;
+      const hasTimestamp = preferences.includeExportTimestamp !== false;
+      document.title = hasTimestamp 
+        ? `${docName.replace(/\s+/g, '_')}_${getFormattedTimestamp()}` 
+        : docName.replace(/\s+/g, '_');
+
+      triggerSystemPrint(
+        () => {},
+        () => {
+          // Restore title
+          document.title = originalTitle;
+        }
+      );
+    } else {
+      setShowPrintToast(true);
+    }
   };
 
   // Trigger browser-side ODT compilation and download
@@ -1213,47 +1218,8 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Editor panel customizations */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Editor Settings</h4>
-                
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <span className="text-xs font-semibold text-slate-700">Display Gutter Line Numbers</span>
-                  <input 
-                    type="checkbox"
-                    checked={preferences.showLineNumbers}
-                    onChange={(e) => setPreferences(p => ({ ...p, showLineNumbers: e.target.checked }))}
-                    className="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <span className="text-xs font-semibold text-slate-700">Show Layout Validation Overlay</span>
-                  <input 
-                    type="checkbox"
-                    checked={preferences.showDebug}
-                    onChange={(e) => setPreferences(p => ({ ...p, showDebug: e.target.checked }))}
-                    className="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs font-semibold text-slate-700">
-                    <span>Editor Typing Font Size ({preferences.editorFontSize}px)</span>
-                  </div>
-                  <input 
-                    type="range"
-                    min="11"
-                    max="20"
-                    value={preferences.editorFontSize}
-                    onChange={(e) => setPreferences(p => ({ ...p, editorFontSize: parseInt(e.target.value) }))}
-                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                  />
-                </div>
-              </div>
-
               {/* Document Settings */}
-              <div className="space-y-5 pt-4 border-t border-slate-100">
+              <div className="space-y-5">
                 <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Document Settings</h4>
 
                 {/* Subtitle: Font size */}
@@ -1339,6 +1305,97 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Editor panel customizations */}
+              <div className="space-y-3 pt-4 border-t border-slate-100">
+                <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Editor Settings</h4>
+                
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="text-xs font-semibold text-slate-700">Display Gutter Line Numbers</span>
+                  <input 
+                    type="checkbox"
+                    checked={preferences.showLineNumbers}
+                    onChange={(e) => setPreferences(p => ({ ...p, showLineNumbers: e.target.checked }))}
+                    className="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="text-xs font-semibold text-slate-700">Show Layout Validation Overlay</span>
+                  <input 
+                    type="checkbox"
+                    checked={preferences.showDebug}
+                    onChange={(e) => setPreferences(p => ({ ...p, showDebug: e.target.checked }))}
+                    className="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs font-semibold text-slate-700">
+                    <span>Editor Typing Font Size ({preferences.editorFontSize}px)</span>
+                  </div>
+                  <input 
+                    type="range"
+                    min="11"
+                    max="20"
+                    value={preferences.editorFontSize}
+                    onChange={(e) => setPreferences(p => ({ ...p, editorFontSize: parseInt(e.target.value) }))}
+                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* How to Use Guide */}
+              <div className="space-y-2.5 pt-4 border-t border-slate-100">
+                <button
+                  onClick={() => setShowHowToUse(!showHowToUse)}
+                  className="w-full flex items-center justify-between text-left group cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-400 uppercase tracking-wider group-hover:text-emerald-600 transition-colors">
+                    <BookOpen size={13} className="text-slate-400 group-hover:text-emerald-500 transition-colors" />
+                    <span>How to Use Guide</span>
+                  </div>
+                  <ChevronDown 
+                    size={13} 
+                    className={`text-slate-400 transition-transform duration-150 ${showHowToUse ? 'rotate-180' : ''}`} 
+                  />
+                </button>
+
+                {showHowToUse && (
+                  <div className="bg-slate-50 p-3.5 rounded-xl text-xs text-slate-600 leading-relaxed border border-slate-100/80 space-y-2.5 animate-fade-in select-text">
+                    <p className="font-bold text-slate-800">
+                      Welcome to Hussayni Typesetter System
+                    </p>
+                    <p>
+                      This system compiles specialized Arabic markup text into A4-sized paginated pages in real-time.
+                    </p>
+                    <div className="space-y-1.5 bg-white p-2.5 rounded-lg border border-slate-100">
+                      <p className="font-extrabold text-[10px] text-slate-500 uppercase tracking-wide">Essential Markups</p>
+                      <ul className="space-y-1.5 pl-0.5">
+                        <li className="flex items-start gap-1.5">
+                          <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono text-[10px] shrink-0 font-bold">H =</code>
+                          <span className="text-[11px] text-slate-500">Main Header/Title block. Renders bold centered display text.</span>
+                        </li>
+                        <li className="flex items-start gap-1.5">
+                          <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono text-[10px] shrink-0 font-bold">B =</code>
+                          <span className="text-[11px] text-slate-500">Body text block. Renders RTL Arabic paragraphs/verses.</span>
+                        </li>
+                        <li className="flex items-start gap-1.5">
+                          <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono text-[10px] shrink-0 font-bold">F =</code>
+                          <span className="text-[11px] text-slate-500">Subtitle/Commentary/Footnotes. Hidden in document exports.</span>
+                        </li>
+                        <li className="flex items-start gap-1.5">
+                          <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono text-[10px] shrink-0 font-bold">P</code>
+                          <span className="text-[11px] text-slate-500">Standalone line. Forces an immediate layout page break.</span>
+                        </li>
+                      </ul>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Adjust font sizes and margins in <strong className="text-slate-700">Document Settings</strong> to resolve horizontal overflows instantly.
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* STORAGE AND SETTINGS PREFERENCES ACTIONS */}
               <div className="space-y-2.5 pt-4 border-t border-slate-100">
                 <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Local Storage Backup Profiles</h4>
@@ -1405,7 +1462,7 @@ export default function App() {
 
             {/* Drawer Footer info */}
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-[10px] text-slate-400">
-              <span>Hussayni typesetter engine v1.0.0</span>
+              <span>Hussayni typesetter engine v1.5.0</span>
               <button 
                 onClick={() => { setShowSettings(false); setShowAbout(true); }}
                 className="text-emerald-600 font-bold hover:underline cursor-pointer"
@@ -1471,9 +1528,6 @@ export default function App() {
                 </div>
                 <div className="flex-grow">
                   <h4 className="font-extrabold text-sm text-slate-900">High-Fidelity PDF Document</h4>
-                  <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
-                    Utilizes your browser's native print engine to construct beautifully styled pages with perfect margin alignment.
-                  </p>
                   <button
                     onClick={handleLaunchPrint}
                     className="mt-3 bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1 shadow-sm cursor-pointer"
@@ -1484,45 +1538,17 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Option B: OpenDocument Text (ODT) */}
+              {/* Option B: Microsoft Word Document (.docx) */}
               <div className="border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/5 p-4 rounded-xl transition-all duration-150 flex items-start gap-3.5">
                 <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0 select-none">
                   <FileText size={18} />
                 </div>
                 <div className="flex-grow">
-                  <h4 className="font-extrabold text-sm text-slate-900">OpenDocument Text File (.odt)</h4>
-                  <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
-                    Assembles standard XML documents offline using JSZip. Fully compatible with LibreOffice, OpenOffice, and Microsoft Word.
-                  </p>
-                  <button
-                    onClick={handleLaunchOdt}
-                    disabled={isGeneratingOdt}
-                    className="mt-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1 shadow-sm cursor-pointer"
-                  >
-                    {isGeneratingOdt ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <Download size={12} />
-                    )}
-                    <span>{isGeneratingOdt ? "Packaging ZIP..." : "Compile & Download .odt"}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Option C: Microsoft Word Document (.docx) */}
-              <div className="border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/5 p-4 rounded-xl transition-all duration-150 flex items-start gap-3.5">
-                <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0 select-none">
-                  <FileText size={18} />
-                </div>
-                <div className="flex-grow">
                   <h4 className="font-extrabold text-sm text-slate-900">Microsoft Word Document (.docx)</h4>
-                  <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
-                    Compiles a fully native Word document with high-fidelity RTL flow, spacing parity, and embedded dynamic page numbers.
-                  </p>
                   <button
                     onClick={handleLaunchDocx}
                     disabled={isGeneratingDocx}
-                    className="mt-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-300 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1 shadow-sm cursor-pointer"
+                    className="mt-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1 shadow-sm cursor-pointer"
                   >
                     {isGeneratingDocx ? (
                       <Loader2 size={12} className="animate-spin" />
@@ -1534,12 +1560,6 @@ export default function App() {
                 </div>
               </div>
 
-            </div>
-
-            {/* Instruction footnote */}
-            <div className="bg-slate-50 border-t border-slate-100 p-4 px-6 text-[11px] text-slate-400 flex items-center gap-2 select-none">
-              <Info size={11} className="shrink-0 text-slate-400" />
-              <span>Compilation is processed entirely in your web sandbox. No network queries or servers are required.</span>
             </div>
           </div>
         </div>
@@ -1619,14 +1639,14 @@ export default function App() {
       {/* PDF PRINT INSTRUCTION TOAST BANNER OVERLAY */}
       {showPrintToast && (
         <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 select-none print:hidden">
-          <div className="bg-white p-6 rounded-xl shadow-2xl max-w-sm text-center border border-slate-100 flex flex-col items-center gap-3.5 animate-bounce">
+          <div className="bg-white p-6 rounded-xl shadow-2xl max-w-sm text-center border border-slate-100 flex flex-col items-center gap-3.5">
             <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shadow-sm shrink-0 select-none">
               <Printer size={22} />
             </div>
             <div>
-              <h3 className="text-base font-extrabold text-slate-900">Typeset compilation ready</h3>
+              <h3 className="text-base font-extrabold text-slate-900">Print settings</h3>
               <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                We are opening your browser's printing system. For optimal vector scaling, adjust:
+                Before printing, please verify the following settings in your browser's dialog:
               </p>
               <ul className="text-left text-[11px] text-slate-600 mt-3 space-y-1 bg-slate-50 p-3.5 rounded-xl border border-slate-100 list-disc pl-4 font-semibold">
                 <li>Printer <span className="text-rose-600 font-bold">Destination</span>: <span className="bg-rose-50 px-1.5 py-0.5 rounded text-rose-800 text-[10px]">Save as PDF</span></li>
@@ -1635,7 +1655,54 @@ export default function App() {
                 <li>Enable <span className="font-bold text-slate-800">Background graphics</span></li>
               </ul>
             </div>
-            <span className="text-[9px] text-slate-400 font-mono tracking-wider animate-pulse uppercase">Opening browser print frame...</span>
+
+            {/* Interactive controls */}
+            <div className="w-full space-y-3.5 mt-2">
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 cursor-pointer justify-center select-none">
+                <input 
+                  type="checkbox" 
+                  checked={neverShowAgain} 
+                  onChange={(e) => setNeverShowAgain(e.target.checked)}
+                  className="rounded text-rose-600 focus:ring-rose-500 border-slate-300 w-4 h-4 cursor-pointer"
+                />
+                <span>Never show this again</span>
+              </label>
+
+              <div className="flex gap-2.5 w-full">
+                <button
+                  onClick={() => setShowPrintToast(false)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2 rounded-lg transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (neverShowAgain) {
+                      localStorage.setItem('hussayni_never_show_print_toast', 'true');
+                    }
+                    setShowPrintToast(false);
+                    
+                    // Trigger native printing
+                    const originalTitle = document.title;
+                    const hasTimestamp = preferences.includeExportTimestamp !== false;
+                    document.title = hasTimestamp 
+                      ? `${docName.replace(/\s+/g, '_')}_${getFormattedTimestamp()}` 
+                      : docName.replace(/\s+/g, '_');
+
+                    triggerSystemPrint(
+                      () => {},
+                      () => {
+                        // Restore title
+                        document.title = originalTitle;
+                      }
+                    );
+                  }}
+                  className="flex-1 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold py-2 rounded-lg transition-colors cursor-pointer shadow-sm"
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -19,15 +19,24 @@ export function usePwa(): UsePwaResult {
   const [isInstalled, setIsInstalled] = useState(false);
   const [isOffline, setIsOffline] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
 
-  // Register service worker with prompt mode
-  const updateServiceWorker = registerSW({
-    onNeedRefresh() {
-      setNeedRefresh(true);
-    },
-    onOfflineReady() {
-      setOfflineReady(true);
-    },
-  });
+  // Register service worker inside useEffect to run once and handle potential errors gracefully
+  const [updateSWFn, setUpdateSWFn] = useState<any>(null);
+
+  useEffect(() => {
+    try {
+      const update = registerSW({
+        onNeedRefresh() {
+          setNeedRefresh(true);
+        },
+        onOfflineReady() {
+          setOfflineReady(true);
+        },
+      });
+      setUpdateSWFn(() => update);
+    } catch (err) {
+      console.warn("PWA Service Worker registration failed/unsupported:", err);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -89,7 +98,9 @@ export function usePwa(): UsePwaResult {
     needRefresh,
     offlineReady,
     updateServiceWorker: async (reloadPage = true) => {
-      await updateServiceWorker(reloadPage);
+      if (updateSWFn) {
+        await updateSWFn(reloadPage);
+      }
     },
     isInstallable,
     isInstalled,

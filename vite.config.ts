@@ -26,7 +26,7 @@ export default defineConfig({
       registerType: 'prompt', // Prompt user for updates
       includeAssets: ['favicon.svg', 'icon.svg'],
       manifest: {
-        name: 'Hussayni Document Compiler',
+        name: 'Hussayni',
         short_name: 'Hussayni',
         description: 'HTML-first Hussayni markup compiler with layout-measurement pagination and PDF export.',
         theme_color: '#0f172a',
