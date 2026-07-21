@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="128" fill="#0f172a"/>
+  <!-- Book / Quran pages representation -->
+  <rect x="120" y="140" width="272" height="232" rx="16" fill="#1e293b"/>
+  <rect x="130" y="150" width="252" height="212" rx="12" fill="#ffffff"/>
+  
+  <!-- Stylized Arabic Calligraphy lines inside book -->
+  <path d="M170 200h170M170 250h130M170 300h150" stroke="#0f172a" stroke-width="12" stroke-linecap="round"/>
+  
+  <!-- Emerald bookmark ribbon -->
+  <path d="M280 150h32v110l-16-12-16 12V150z" fill="#10b981"/>
+  
+  <!-- Quill pen writing on book -->
+  <path d="M380 110c-15-15-40-15-55 0L210 225l-10 45 45-10 115-115c15-15 15-40 0-55z" fill="#10b981" opacity="0.95"/>
+  <circle cx="215" cy="255" r="5" fill="#0f172a"/>
+</svg>

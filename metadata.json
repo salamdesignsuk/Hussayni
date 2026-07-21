@@ -1,0 +1,8 @@
+{
+  "name": "Hussayni HTML",
+  "description": "HTML-first Hussayni markup compiler with layout-measurement pagination and PDF export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
