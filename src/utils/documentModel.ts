@@ -46,6 +46,10 @@ export interface UserPreferences {
   showPageNumber: boolean;
   footerFontSize: number;
   includeExportTimestamp?: boolean;
+  outputMode?: 'P' | 'H';
+  headerFontSize?: number;
+  headerLineSpacing?: number;
+  headerTheme?: 'dark' | 'light';
 }
 
 export interface RecentDocument {
@@ -69,5 +73,9 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   showDebug: false,
   showPageNumber: true,
   footerFontSize: 14,
-  includeExportTimestamp: false
+  includeExportTimestamp: false,
+  outputMode: 'P',
+  headerFontSize: 145,
+  headerLineSpacing: 1.2,
+  headerTheme: 'dark'
 };

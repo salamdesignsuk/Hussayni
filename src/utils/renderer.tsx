@@ -108,7 +108,7 @@ export const A4Page: React.FC<A4PageProps> = ({
               }}
             >
               <span className="hussayni-line-span-render" style={{ display: 'inline-block', whiteSpace: 'nowrap' }}>
-                {lineText}
+                {lineText.trim() === '' ? '\u00A0' : lineText}
               </span>
             </h2>
           ))}
@@ -280,3 +280,128 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
     </div>
   );
 };
+
+export interface HeaderOnlyPageProps {
+  headerText: string;
+  headerIndex: number;
+  totalHeaders: number;
+  fontSize: number;
+  lineSpacing: number;
+  theme?: 'dark' | 'light';
+}
+
+export const HeaderOnlyPage: React.FC<HeaderOnlyPageProps> = ({
+  headerText,
+  headerIndex,
+  totalHeaders,
+  fontSize,
+  lineSpacing,
+  theme = 'dark',
+}) => {
+  const isLight = theme === 'light';
+  const bgColor = isLight ? '#ffffff' : '#0f172a';
+  const textColor = isLight ? '#000000' : '#f8fafc';
+  const themeClass = isLight ? 'header-light' : 'header-dark';
+  const borderColor = isLight ? 'border-slate-300' : 'border-slate-800';
+  const badgeClass = isLight 
+    ? 'bg-slate-100/90 text-slate-700 border-slate-300' 
+    : 'bg-slate-800/90 text-slate-300 border-slate-700';
+  const h1TextClass = isLight
+    ? 'font-extrabold text-black text-center w-full leading-tight tracking-normal'
+    : 'font-extrabold text-slate-50 text-center w-full leading-tight drop-shadow-md tracking-normal';
+
+  return (
+    <div 
+      className={`header-page ${themeClass} select-text transition-all duration-200 shadow-2xl border ${borderColor}`}
+      style={{
+        width: '1920px',
+        height: '1080px',
+        backgroundColor: bgColor,
+        color: textColor,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '80px 120px',
+        boxSizing: 'border-box',
+        direction: 'rtl',
+        position: 'relative',
+        fontFamily: 'Arial, "Traditional Arabic", sans-serif',
+      }}
+      dir="rtl"
+    >
+      {/* Decorative Slide Badge (hidden when printing) */}
+      <span className={`absolute top-8 left-12 text-base font-bold border px-5 py-2 rounded-full print:hidden select-none ${badgeClass}`}>
+        1920 × 1080 Landscape • Slide {headerIndex + 1} of {totalHeaders}
+      </span>
+
+      {/* Header Display Content */}
+      <div className="w-full h-full flex flex-col justify-center items-center text-center">
+        {headerText.split('\n').map((lineText, idx) => (
+          <h1 
+            key={idx}
+            className={h1TextClass}
+            style={{ 
+              fontSize: `${fontSize}px`, 
+              lineHeight: lineSpacing,
+              minHeight: `${fontSize * lineSpacing}px`,
+              margin: 0, 
+              padding: 0 
+            }}
+          >
+            {lineText.trim() === '' ? '\u00A0' : lineText}
+          </h1>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export interface HeaderOnlyRendererProps {
+  headers: string[];
+  fontSize: number;
+  lineSpacing: number;
+  zoom: number;
+  theme?: 'dark' | 'light';
+}
+
+export const HeaderOnlyRenderer: React.FC<HeaderOnlyRendererProps> = ({
+  headers,
+  fontSize,
+  lineSpacing,
+  zoom,
+  theme = 'dark',
+}) => {
+  const displayHeaders = headers.length > 0 ? headers : ['عنوان القصيدة'];
+  const baseScale = 0.42;
+  const effectiveScale = baseScale * (zoom / 100);
+
+  return (
+    <div 
+      id="print-container"
+      className="flex flex-col items-center gap-10 print:gap-0"
+      style={{
+        transform: `scale(${effectiveScale})`,
+        transformOrigin: 'top center',
+        width: '1920px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        marginBottom: `${(effectiveScale * 1080 * displayHeaders.length) - (1080 * (displayHeaders.length - 1))}px`
+      }}
+    >
+      {displayHeaders.map((headerText, index) => (
+        <HeaderOnlyPage
+          key={index}
+          headerText={headerText}
+          headerIndex={index}
+          totalHeaders={displayHeaders.length}
+          fontSize={fontSize}
+          lineSpacing={lineSpacing}
+          theme={theme}
+        />
+      ))}
+    </div>
+  );
+};
+

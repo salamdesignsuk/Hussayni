@@ -26,11 +26,14 @@ import {
   ChevronDown,
   Calendar,
   BookOpen,
-  MoreVertical
+  MoreVertical,
+  Type,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { parseMarkup } from './utils/parser';
 import { paginateDocument } from './utils/paginator';
-import { DocumentRenderer } from './utils/renderer';
+import { DocumentRenderer, HeaderOnlyRenderer } from './utils/renderer';
 import { triggerSystemPrint } from './utils/pdfExport';
 import { generateOdtBlob } from './utils/odtGenerator';
 import { generateDocxBlob } from './utils/docxGenerator';
@@ -183,6 +186,16 @@ export default function App() {
     const col = linesArr[linesArr.length - 1].length + 1;
     setCursorInfo({ line, col });
   };
+
+  // Extract headers for Header-Only output mode
+  const extractedHeaders = React.useMemo(() => {
+    const parsed = parseMarkup(code);
+    const list = parsed.tokens
+      .filter(t => t.type === 'H')
+      .map(t => t.text.trim())
+      .filter(Boolean);
+    return list.length > 0 ? list : [docName || 'عنوان القصيدة'];
+  }, [code, docName]);
 
   // Asynchronous Pagination triggered by content or preference updates
   useEffect(() => {
@@ -342,39 +355,49 @@ export default function App() {
     return `${year}-${month}-${day}_${hours}-${minutes}`;
   };
 
+  const getSanitizedDocName = () => docName.replace(/\s+/g, '_');
+
   // Export current markup source
   const handleSaveSource = () => {
     const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const hasTimestamp = preferences.includeExportTimestamp !== false;
+    const hasTimestamp = preferences.includeExportTimestamp === true;
+    const baseName = getSanitizedDocName();
     a.download = hasTimestamp 
-      ? `${docName.replace(/\s+/g, '_')}_${getFormattedTimestamp()}.txt` 
-      : `${docName.replace(/\s+/g, '_')}.txt`;
+      ? `${baseName}_${getFormattedTimestamp()}.txt` 
+      : `${baseName}.txt`;
     a.click();
     URL.revokeObjectURL(url);
     triggerToast("Saved source file");
   };
 
-  // Trigger browser A4 vector printing (PDF Export)
+  // Trigger browser vector printing (PDF Export)
   const handleLaunchPrint = () => {
     setShowExportModal(false);
     const neverShow = localStorage.getItem('hussayni_never_show_print_toast') === 'true';
 
     if (neverShow) {
-      // Set title to the formatted filename so that native PDF printer defaults to this name
       const originalTitle = document.title;
-      const hasTimestamp = preferences.includeExportTimestamp !== false;
+      const hasTimestamp = preferences.includeExportTimestamp === true;
+      const baseName = getSanitizedDocName();
       document.title = hasTimestamp 
-        ? `${docName.replace(/\s+/g, '_')}_${getFormattedTimestamp()}` 
-        : docName.replace(/\s+/g, '_');
+        ? `${baseName}_${getFormattedTimestamp()}` 
+        : baseName;
+
+      const isHeaderMode = preferences.outputMode === 'H';
+      if (isHeaderMode) {
+        document.body.classList.add('mode-header-only');
+      }
 
       triggerSystemPrint(
         () => {},
         () => {
-          // Restore title
           document.title = originalTitle;
+          if (isHeaderMode) {
+            document.body.classList.remove('mode-header-only');
+          }
         }
       );
     } else {
@@ -397,10 +420,11 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const hasTimestamp = preferences.includeExportTimestamp !== false;
+      const hasTimestamp = preferences.includeExportTimestamp === true;
+      const baseName = getSanitizedDocName();
       a.download = hasTimestamp 
-        ? `${docName.replace(/\s+/g, '_')}_${getFormattedTimestamp()}.odt` 
-        : `${docName.replace(/\s+/g, '_')}.odt`;
+        ? `${baseName}_${getFormattedTimestamp()}.odt` 
+        : `${baseName}.odt`;
       a.click();
       URL.revokeObjectURL(url);
       triggerToast("ODT file compiled successfully!");
@@ -427,10 +451,11 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const hasTimestamp = preferences.includeExportTimestamp !== false;
+      const hasTimestamp = preferences.includeExportTimestamp === true;
+      const baseName = getSanitizedDocName();
       a.download = hasTimestamp 
-        ? `${docName.replace(/\s+/g, '_')}_${getFormattedTimestamp()}.docx` 
-        : `${docName.replace(/\s+/g, '_')}.docx`;
+        ? `${baseName}_${getFormattedTimestamp()}.docx` 
+        : `${baseName}.docx`;
       a.click();
       URL.revokeObjectURL(url);
       triggerToast("Word document (.docx) compiled successfully!");
@@ -847,6 +872,34 @@ export default function App() {
 
           <div className="h-4 w-px bg-slate-700 mx-0.5 sm:mx-1 hidden sm:block"></div>
 
+          {/* OUTPUT MODE SWITCH: H (Header Only 1920x1080) vs P (Full Poem A4) */}
+          <div className="bg-slate-800/90 p-0.5 rounded-lg border border-slate-700 flex items-center shadow-inner select-none">
+            <button
+              onClick={() => setPreferences(p => ({ ...p, outputMode: 'H' }))}
+              className={`px-2 py-1 rounded text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
+                preferences.outputMode === 'H'
+                  ? 'bg-emerald-500 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+              }`}
+              title="Header Only Output Mode (1920x1080 Landscape)"
+            >
+              <Type size={12} />
+              <span className="font-extrabold">H</span>
+            </button>
+            <button
+              onClick={() => setPreferences(p => ({ ...p, outputMode: 'P' }))}
+              className={`px-2 py-1 rounded text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
+                preferences.outputMode !== 'H'
+                  ? 'bg-emerald-500 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+              }`}
+              title="Full Poem Output Mode (A4 Paginated Document)"
+            >
+              <FileText size={12} />
+              <span className="font-extrabold">P</span>
+            </button>
+          </div>
+
           {/* EXPORT OVERLAY ACTION BUTTON */}
           <button 
             onClick={() => setShowExportModal(true)}
@@ -1075,7 +1128,15 @@ export default function App() {
           id="preview-section"
           className={`flex-1 ${themeClasses.workspaceBg} p-4 sm:p-6 flex-col items-center overflow-y-auto relative scroll-smooth print:p-0 print:bg-white print:overflow-visible print:absolute print:inset-0 print:w-full print:h-auto transition-colors duration-200 ${isMobile && activeTab !== 'preview' ? 'hidden' : 'flex'}`}
         >
-          {isPaginating && pages.length === 0 ? (
+          {preferences.outputMode === 'H' ? (
+            <HeaderOnlyRenderer 
+              headers={extractedHeaders}
+              fontSize={preferences.headerFontSize || 145}
+              lineSpacing={preferences.headerLineSpacing || 1.2}
+              zoom={preferences.zoom}
+              theme={preferences.headerTheme || 'dark'}
+            />
+          ) : isPaginating && pages.length === 0 ? (
             <div className="m-auto text-center text-slate-400 flex flex-col items-center gap-3 select-none">
               <Loader2 size={32} className="animate-spin text-emerald-500" />
               <p className="text-xs">Recalculating layout using real DOM vectors...</p>
@@ -1099,42 +1160,131 @@ export default function App() {
 
           {/* FLOATING ACTION HUD: ZOOM & RANGE SPECIFICATIONS */}
           <div className="fixed bottom-12 right-4 sm:right-8 flex flex-col sm:flex-row items-end sm:items-center gap-2 print:hidden z-40 select-none">
-            {isPaginating && (
+            {isPaginating && preferences.outputMode !== 'H' && (
               <div className="bg-slate-900 text-white px-3 py-2 rounded-full shadow-lg flex items-center gap-2 text-[11px] font-medium border border-slate-700">
                 <Loader2 size={11} className="animate-spin text-emerald-400" />
                 <span>Compiling Layout...</span>
               </div>
             )}
 
-            {/* Zoom Slider Action panel */}
-            <div className="bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-lg border border-slate-200 flex items-center gap-2.5">
-              <span className="text-[9px] font-extrabold text-slate-400 tracking-wider">ZOOM</span>
-              <button 
-                onClick={() => setPreferences(p => ({ ...p, zoom: Math.max(50, p.zoom - 10) }))}
-                className="hover:bg-slate-100 p-1 rounded-full text-slate-600 transition-colors cursor-pointer"
-              >
-                <ZoomOut size={13} />
-              </button>
-              <span className="text-[11px] font-extrabold text-slate-700 min-w-[28px] text-center">{preferences.zoom}%</span>
-              <button 
-                onClick={() => setPreferences(p => ({ ...p, zoom: Math.min(150, p.zoom + 10) }))}
-                className="hover:bg-slate-100 p-1 rounded-full text-slate-600 transition-colors cursor-pointer"
-              >
-                <ZoomIn size={13} />
-              </button>
-            </div>
+            {preferences.outputMode === 'H' ? (
+              /* Header Only Options HUD */
+              <div className="bg-white/95 backdrop-blur-md px-4 py-2.5 rounded-2xl shadow-xl border border-slate-200 flex flex-col sm:flex-row items-center gap-3.5 text-xs">
+                {/* Text Size Control */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] font-extrabold text-slate-400 tracking-wider uppercase">Text Size</span>
+                  <input 
+                    type="range"
+                    min="32"
+                    max="220"
+                    value={preferences.headerFontSize || 145}
+                    onChange={(e) => setPreferences(p => ({ ...p, headerFontSize: parseInt(e.target.value) }))}
+                    className="w-20 sm:w-24 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                  />
+                  <span className="text-xs font-extrabold text-slate-700 min-w-[32px]">{preferences.headerFontSize || 145}px</span>
+                </div>
 
-            {/* Dynamic Font Range Indicators */}
-            <div className="bg-white/95 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-slate-200 flex items-center gap-2">
-              <span className="text-[9px] font-extrabold text-slate-400 tracking-wider">FONT RANGE</span>
-              <span className="text-xs font-bold text-emerald-600">
-                {preferences.minFontSize}-{preferences.maxFontSize}pt
-              </span>
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
-              <span className="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                Active: {mainFontSize}pt
-              </span>
-            </div>
+                <div className="h-3.5 w-px bg-slate-200 hidden sm:block"></div>
+
+                {/* Line Spacing Control */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] font-extrabold text-slate-400 tracking-wider uppercase">Line Spacing</span>
+                  <input 
+                    type="range"
+                    min="1.0"
+                    max="2.5"
+                    step="0.1"
+                    value={preferences.headerLineSpacing || 1.2}
+                    onChange={(e) => setPreferences(p => ({ ...p, headerLineSpacing: parseFloat(e.target.value) }))}
+                    className="w-16 sm:w-20 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                  />
+                  <span className="text-xs font-extrabold text-slate-700 min-w-[28px]">{preferences.headerLineSpacing || 1.2}x</span>
+                </div>
+
+                <div className="h-3.5 w-px bg-slate-200 hidden sm:block"></div>
+
+                {/* Theme Mode Control (Dark vs Light) */}
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 select-none">
+                  <button
+                    onClick={() => setPreferences(p => ({ ...p, headerTheme: 'light' }))}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      preferences.headerTheme === 'light'
+                        ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                    title="Light Mode (White Background & Black Text)"
+                  >
+                    <Sun size={11} />
+                    <span>Light</span>
+                  </button>
+                  <button
+                    onClick={() => setPreferences(p => ({ ...p, headerTheme: 'dark' }))}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      preferences.headerTheme !== 'light'
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                    title="Dark Mode (Black Background & White Text)"
+                  >
+                    <Moon size={11} />
+                    <span>Dark</span>
+                  </button>
+                </div>
+
+                <div className="h-3.5 w-px bg-slate-200 hidden sm:block"></div>
+
+                {/* Zoom Controls */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] font-extrabold text-slate-400 tracking-wider uppercase">Zoom</span>
+                  <button 
+                    onClick={() => setPreferences(p => ({ ...p, zoom: Math.max(50, p.zoom - 10) }))}
+                    className="hover:bg-slate-100 p-1 rounded-full text-slate-600 transition-colors cursor-pointer"
+                  >
+                    <ZoomOut size={13} />
+                  </button>
+                  <span className="text-xs font-extrabold text-slate-700 min-w-[28px] text-center">{preferences.zoom}%</span>
+                  <button 
+                    onClick={() => setPreferences(p => ({ ...p, zoom: Math.min(150, p.zoom + 10) }))}
+                    className="hover:bg-slate-100 p-1 rounded-full text-slate-600 transition-colors cursor-pointer"
+                  >
+                    <ZoomIn size={13} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Full Poem HUD */
+              <>
+                {/* Zoom Slider Action panel */}
+                <div className="bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-lg border border-slate-200 flex items-center gap-2.5">
+                  <span className="text-[9px] font-extrabold text-slate-400 tracking-wider">ZOOM</span>
+                  <button 
+                    onClick={() => setPreferences(p => ({ ...p, zoom: Math.max(50, p.zoom - 10) }))}
+                    className="hover:bg-slate-100 p-1 rounded-full text-slate-600 transition-colors cursor-pointer"
+                  >
+                    <ZoomOut size={13} />
+                  </button>
+                  <span className="text-[11px] font-extrabold text-slate-700 min-w-[28px] text-center">{preferences.zoom}%</span>
+                  <button 
+                    onClick={() => setPreferences(p => ({ ...p, zoom: Math.min(150, p.zoom + 10) }))}
+                    className="hover:bg-slate-100 p-1 rounded-full text-slate-600 transition-colors cursor-pointer"
+                  >
+                    <ZoomIn size={13} />
+                  </button>
+                </div>
+
+                {/* Dynamic Font Range Indicators */}
+                <div className="bg-white/95 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-slate-200 flex items-center gap-2">
+                  <span className="text-[9px] font-extrabold text-slate-400 tracking-wider">FONT RANGE</span>
+                  <span className="text-xs font-bold text-emerald-600">
+                    {preferences.minFontSize}-{preferences.maxFontSize}pt
+                  </span>
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
+                  <span className="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                    Active: {mainFontSize}pt
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         </section>
       </main>
@@ -1301,6 +1451,70 @@ export default function App() {
                       onChange={(e) => setPreferences(p => ({ ...p, footerFontSize: parseInt(e.target.value) }))}
                       className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
                     />
+                  </div>
+                </div>
+
+                {/* Subtitle: Header Only Settings */}
+                <div className="space-y-3 pl-1 pt-1 border-t border-slate-100">
+                  <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Header Only (1920×1080) Settings</h5>
+                  
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs font-semibold text-slate-700">
+                      <span>Header Text Size ({preferences.headerFontSize || 145}px)</span>
+                    </div>
+                    <input 
+                      type="range"
+                      min="32"
+                      max="220"
+                      value={preferences.headerFontSize || 145}
+                      onChange={(e) => setPreferences(p => ({ ...p, headerFontSize: parseInt(e.target.value) }))}
+                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs font-semibold text-slate-700">
+                      <span>Header Line Spacing ({preferences.headerLineSpacing || 1.2}x)</span>
+                    </div>
+                    <input 
+                      type="range"
+                      min="1.0"
+                      max="2.5"
+                      step="0.1"
+                      value={preferences.headerLineSpacing || 1.2}
+                      onChange={(e) => setPreferences(p => ({ ...p, headerLineSpacing: parseFloat(e.target.value) }))}
+                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-semibold text-slate-700">
+                      <span>Header Theme</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setPreferences(p => ({ ...p, headerTheme: 'light' }))}
+                        className={`py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
+                          preferences.headerTheme === 'light'
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <Sun size={13} />
+                        <span>Light (White)</span>
+                      </button>
+                      <button
+                        onClick={() => setPreferences(p => ({ ...p, headerTheme: 'dark' }))}
+                        className={`py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
+                          preferences.headerTheme !== 'light'
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <Moon size={13} />
+                        <span>Dark (Black)</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1684,16 +1898,24 @@ export default function App() {
                     
                     // Trigger native printing
                     const originalTitle = document.title;
-                    const hasTimestamp = preferences.includeExportTimestamp !== false;
+                    const hasTimestamp = preferences.includeExportTimestamp === true;
+                    const baseName = getSanitizedDocName();
                     document.title = hasTimestamp 
-                      ? `${docName.replace(/\s+/g, '_')}_${getFormattedTimestamp()}` 
-                      : docName.replace(/\s+/g, '_');
+                      ? `${baseName}_${getFormattedTimestamp()}` 
+                      : baseName;
+
+                    const isHeaderMode = preferences.outputMode === 'H';
+                    if (isHeaderMode) {
+                      document.body.classList.add('mode-header-only');
+                    }
 
                     triggerSystemPrint(
                       () => {},
                       () => {
-                        // Restore title
                         document.title = originalTitle;
+                        if (isHeaderMode) {
+                          document.body.classList.remove('mode-header-only');
+                        }
                       }
                     );
                   }}

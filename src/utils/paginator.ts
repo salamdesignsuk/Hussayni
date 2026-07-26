@@ -93,9 +93,10 @@ export async function paginateDocument(
       const lines = text.split('\n');
       return lines.map((lineText, idx) => {
         const currentLineNum = lineIndex + idx;
+        const lineContent = lineText.trim() === '' ? '&nbsp;' : lineText;
         return `
           <p class="hussayni-para" data-line="${currentLineNum}" style="font-family: Arial, sans-serif; font-size: ${fontSize}pt; line-height: 1.3; font-weight: ${isBold ? 'bold' : 'normal'}; margin: 0; padding: 0; text-align: center; color: ${color}; direction: rtl; white-space: nowrap; overflow: visible; width: 100%;">
-            <span class="hussayni-line-span" style="display: inline-block; white-space: nowrap;">${lineText}</span>
+            <span class="hussayni-line-span" style="display: inline-block; white-space: nowrap;">${lineContent}</span>
           </p>
         `;
       }).join('');
