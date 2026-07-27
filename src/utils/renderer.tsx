@@ -1,5 +1,7 @@
 import React from 'react';
+import { Download } from 'lucide-react';
 import { ParsedPage } from './documentModel';
+import { exportSingleHeaderImage } from './imageExporter';
 
 interface A4PageProps {
   page: ParsedPage;
@@ -288,6 +290,7 @@ export interface HeaderOnlyPageProps {
   fontSize: number;
   lineSpacing: number;
   theme?: 'dark' | 'light';
+  docName?: string;
 }
 
 export const HeaderOnlyPage: React.FC<HeaderOnlyPageProps> = ({
@@ -297,18 +300,19 @@ export const HeaderOnlyPage: React.FC<HeaderOnlyPageProps> = ({
   fontSize,
   lineSpacing,
   theme = 'dark',
+  docName = 'Header_Slide'
 }) => {
   const isLight = theme === 'light';
-  const bgColor = isLight ? '#ffffff' : '#0f172a';
-  const textColor = isLight ? '#000000' : '#f8fafc';
+  const bgColor = isLight ? '#ffffff' : '#000000';
+  const textColor = isLight ? '#000000' : '#ffffff';
   const themeClass = isLight ? 'header-light' : 'header-dark';
-  const borderColor = isLight ? 'border-slate-300' : 'border-slate-800';
+  const borderColor = isLight ? 'border-slate-300' : 'border-zinc-800';
   const badgeClass = isLight 
     ? 'bg-slate-100/90 text-slate-700 border-slate-300' 
-    : 'bg-slate-800/90 text-slate-300 border-slate-700';
+    : 'bg-zinc-900/90 text-zinc-300 border-zinc-700';
   const h1TextClass = isLight
     ? 'font-extrabold text-black text-center w-full leading-tight tracking-normal'
-    : 'font-extrabold text-slate-50 text-center w-full leading-tight drop-shadow-md tracking-normal';
+    : 'font-extrabold text-white text-center w-full leading-tight drop-shadow-md tracking-normal';
 
   return (
     <div 
@@ -330,10 +334,28 @@ export const HeaderOnlyPage: React.FC<HeaderOnlyPageProps> = ({
       }}
       dir="rtl"
     >
-      {/* Decorative Slide Badge (hidden when printing) */}
-      <span className={`absolute top-8 left-12 text-base font-bold border px-5 py-2 rounded-full print:hidden select-none ${badgeClass}`}>
-        1920 × 1080 Landscape • Slide {headerIndex + 1} of {totalHeaders}
-      </span>
+      {/* Decorative Slide Badge & Export Action Buttons (hidden when printing) */}
+      <div className="absolute top-8 left-12 flex items-center gap-3 print:hidden select-none z-10">
+        <span className={`text-base font-bold border px-5 py-2.5 rounded-full ${badgeClass}`}>
+          1920 × 1080 • Slide {headerIndex + 1} of {totalHeaders}
+        </span>
+        <button
+          onClick={() => exportSingleHeaderImage(headerText, headerIndex, { headers: [headerText], fontSize, lineSpacing, theme, format: 'png', docName })}
+          className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-4 py-2.5 rounded-full text-sm transition-colors cursor-pointer flex items-center gap-1.5 shadow-lg active:scale-95"
+          title="Export Slide as PNG Image"
+        >
+          <Download size={15} />
+          <span>PNG</span>
+        </button>
+        <button
+          onClick={() => exportSingleHeaderImage(headerText, headerIndex, { headers: [headerText], fontSize, lineSpacing, theme, format: 'jpg', docName })}
+          className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold px-4 py-2.5 rounded-full text-sm transition-colors cursor-pointer flex items-center gap-1.5 shadow-lg active:scale-95"
+          title="Export Slide as JPG Image"
+        >
+          <Download size={15} />
+          <span>JPG</span>
+        </button>
+      </div>
 
       {/* Header Display Content */}
       <div className="w-full h-full flex flex-col justify-center items-center text-center">
@@ -363,6 +385,7 @@ export interface HeaderOnlyRendererProps {
   lineSpacing: number;
   zoom: number;
   theme?: 'dark' | 'light';
+  docName?: string;
 }
 
 export const HeaderOnlyRenderer: React.FC<HeaderOnlyRendererProps> = ({
@@ -371,35 +394,52 @@ export const HeaderOnlyRenderer: React.FC<HeaderOnlyRendererProps> = ({
   lineSpacing,
   zoom,
   theme = 'dark',
+  docName = 'Header_Slide'
 }) => {
   const displayHeaders = headers.length > 0 ? headers : ['عنوان القصيدة'];
   const baseScale = 0.42;
   const effectiveScale = baseScale * (zoom / 100);
 
+  const scaledWidth = 1920 * effectiveScale;
+  const scaledHeight = 1080 * effectiveScale;
+
   return (
     <div 
       id="print-container"
-      className="flex flex-col items-center gap-10 print:gap-0"
-      style={{
-        transform: `scale(${effectiveScale})`,
-        transformOrigin: 'top center',
-        width: '1920px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        marginBottom: `${(effectiveScale * 1080 * displayHeaders.length) - (1080 * (displayHeaders.length - 1))}px`
-      }}
+      className="flex flex-col items-center print:gap-0 max-w-full py-2"
     >
       {displayHeaders.map((headerText, index) => (
-        <HeaderOnlyPage
+        <div
           key={index}
-          headerText={headerText}
-          headerIndex={index}
-          totalHeaders={displayHeaders.length}
-          fontSize={fontSize}
-          lineSpacing={lineSpacing}
-          theme={theme}
-        />
+          className="relative flex justify-center mb-8 last:mb-0 print:mb-0 print:w-[1920px] print:h-[1080px]"
+          style={{
+            width: `${scaledWidth}px`,
+            height: `${scaledHeight}px`,
+          }}
+        >
+          <div
+            style={{
+              width: '1920px',
+              height: '1080px',
+              transform: `scale(${effectiveScale})`,
+              transformOrigin: 'top left',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+            }}
+            className="print:static print:transform-none"
+          >
+            <HeaderOnlyPage
+              headerText={headerText}
+              headerIndex={index}
+              totalHeaders={displayHeaders.length}
+              fontSize={fontSize}
+              lineSpacing={lineSpacing}
+              theme={theme}
+              docName={docName}
+            />
+          </div>
+        </div>
       ))}
     </div>
   );

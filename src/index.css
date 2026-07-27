@@ -1,6 +1,21 @@
 @import "tailwindcss";
 
 @layer utilities {
+  /* Prevent iOS Safari auto-zoom on form control focus */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+  @media (min-width: 640px) {
+    input, textarea, select {
+      font-size: inherit !important;
+    }
+  }
+
+  /* Prevent double-tap zoom delay on iOS interactive elements */
+  button, a, input, select, textarea {
+    touch-action: manipulation;
+  }
+
   /* Custom scrollbar for sleeker UI */
   ::-webkit-scrollbar {
     width: 6px;
@@ -139,8 +154,8 @@
   }
 
   .header-page.header-dark {
-    background-color: #0f172a !important;
-    color: #f8fafc !important;
+    background-color: #000000 !important;
+    color: #ffffff !important;
   }
 
   .header-page.header-light {

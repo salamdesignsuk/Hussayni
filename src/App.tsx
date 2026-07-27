@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, 
+  Minus,
   FolderOpen, 
   Save, 
   Printer, 
@@ -29,7 +30,8 @@ import {
   MoreVertical,
   Type,
   Sun,
-  Moon
+  Moon,
+  Image
 } from 'lucide-react';
 import { parseMarkup } from './utils/parser';
 import { paginateDocument } from './utils/paginator';
@@ -37,6 +39,7 @@ import { DocumentRenderer, HeaderOnlyRenderer } from './utils/renderer';
 import { triggerSystemPrint } from './utils/pdfExport';
 import { generateOdtBlob } from './utils/odtGenerator';
 import { generateDocxBlob } from './utils/docxGenerator';
+import { exportAllHeaderImages } from './utils/imageExporter';
 import { usePwa } from './utils/usePwa';
 import { 
   ParsedPage, 
@@ -375,6 +378,10 @@ export default function App() {
 
   // Trigger browser vector printing (PDF Export)
   const handleLaunchPrint = () => {
+    if (preferences.outputMode === 'H') {
+      triggerToast("PDF Print is disabled in Header Mode (use PNG/JPG slide export)");
+      return;
+    }
     setShowExportModal(false);
     const neverShow = localStorage.getItem('hussayni_never_show_print_toast') === 'true';
 
@@ -386,18 +393,10 @@ export default function App() {
         ? `${baseName}_${getFormattedTimestamp()}` 
         : baseName;
 
-      const isHeaderMode = preferences.outputMode === 'H';
-      if (isHeaderMode) {
-        document.body.classList.add('mode-header-only');
-      }
-
       triggerSystemPrint(
         () => {},
         () => {
           document.title = originalTitle;
-          if (isHeaderMode) {
-            document.body.classList.remove('mode-header-only');
-          }
         }
       );
     } else {
@@ -732,60 +731,70 @@ export default function App() {
         {/* Workspace Quick Actions */}
         <div className="flex items-center gap-1 sm:gap-1.5">
           
-          {/* Recent Document Selector Dropdown */}
-          <div className="relative">
-            <button 
-              onClick={() => {
-                setShowRecentMenu(!showRecentMenu);
-                setShowFileMenu(false);
-              }}
-              className="px-2 py-1.5 sm:px-3 sm:py-1.5 hover:bg-white/10 rounded text-xs font-semibold transition-all duration-150 flex items-center gap-1.5 text-slate-200 cursor-pointer"
-              title="Switch to previously saved workbooks"
-            >
-              <History size={13} />
-              <span className="hidden md:inline">History</span>
-              <ChevronDown size={11} className={`transition-transform duration-150 ${showRecentMenu ? 'rotate-180' : ''}`} />
-            </button>
-            {showRecentMenu && (
-              <div className="absolute top-10 right-[-100px] sm:right-auto sm:left-0 w-64 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-2.5 z-50 text-slate-200 select-none">
-                <p className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider border-b border-slate-800">
-                  Recent Document Drafts ({recentDocs.length})
-                </p>
-                <div className="mt-1.5 space-y-0.5 max-h-60 overflow-y-auto">
-                  {recentDocs.length === 0 ? (
-                    <p className="text-xs text-slate-500 p-3 text-center">No cached document logs found.</p>
-                  ) : (
-                    recentDocs.map((doc) => (
-                      <div 
-                        key={doc.id}
-                        onClick={() => handleLoadRecent(doc)}
-                        className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-left ${
-                          doc.name === docName ? 'bg-emerald-950/40 text-emerald-300' : 'hover:bg-white/5 text-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 overflow-hidden">
-                           <FileText size={13} className="shrink-0 text-slate-500" />
-                          <div className="overflow-hidden">
-                            <p className="text-xs font-medium truncate">{doc.name}</p>
-                            <p className="text-[9px] text-slate-500">
-                              {new Date(doc.lastSaved).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                          </div>
+          {/* Recent Document Selector Dropdown (Desktop) */}
+          {!isMobile && (
+            <div className="relative">
+              <button 
+                onClick={() => {
+                  setShowRecentMenu(!showRecentMenu);
+                  setShowFileMenu(false);
+                }}
+                className="px-2 py-1.5 sm:px-3 sm:py-1.5 hover:bg-white/10 rounded text-xs font-semibold transition-all duration-150 flex items-center gap-1.5 text-slate-200 cursor-pointer"
+                title="Switch to previously saved workbooks"
+              >
+                <History size={13} />
+                <span className="hidden md:inline">History</span>
+                <ChevronDown size={11} className={`transition-transform duration-150 ${showRecentMenu ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+          )}
+
+          {/* Recent Document Drafts Modal/Dropdown container when triggered */}
+          {showRecentMenu && (
+            <div className="absolute top-12 right-2 sm:right-auto sm:left-40 w-64 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-2.5 z-50 text-slate-200 select-none">
+              <p className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
+                <span>Recent Drafts ({recentDocs.length})</span>
+                <button 
+                  onClick={() => setShowRecentMenu(false)}
+                  className="text-slate-500 hover:text-slate-300 text-xs px-1"
+                >
+                  ✕
+                </button>
+              </p>
+              <div className="mt-1.5 space-y-0.5 max-h-60 overflow-y-auto">
+                {recentDocs.length === 0 ? (
+                  <p className="text-xs text-slate-500 p-3 text-center">No cached document logs found.</p>
+                ) : (
+                  recentDocs.map((doc) => (
+                    <div 
+                      key={doc.id}
+                      onClick={() => handleLoadRecent(doc)}
+                      className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-left ${
+                        doc.name === docName ? 'bg-emerald-950/40 text-emerald-300' : 'hover:bg-white/5 text-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 overflow-hidden">
+                         <FileText size={13} className="shrink-0 text-slate-500" />
+                        <div className="overflow-hidden">
+                          <p className="text-xs font-medium truncate">{doc.name}</p>
+                          <p className="text-[9px] text-slate-500">
+                            {new Date(doc.lastSaved).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
                         </div>
-                        <button 
-                          onClick={(e) => handleDeleteRecent(doc.id, e)}
-                          className="p-1 hover:bg-white/10 rounded text-slate-500 hover:text-rose-400 cursor-pointer"
-                          title="Wipe record"
-                        >
-                          <Trash2 size={11} />
-                        </button>
                       </div>
-                    ))
-                  )}
-                </div>
+                      <button 
+                        onClick={(e) => handleDeleteRecent(doc.id, e)}
+                        className="p-1 hover:bg-white/10 rounded text-slate-500 hover:text-rose-400 cursor-pointer"
+                        title="Wipe record"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="h-4 w-px bg-slate-700 mx-0.5 sm:mx-1 hidden sm:block"></div>
 
@@ -835,6 +844,16 @@ export default function App() {
                   >
                     <Save size={14} className="text-amber-400" />
                     <span>Save</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowRecentMenu(true);
+                      setShowFileMenu(false);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-white/10 rounded-lg text-xs font-semibold transition-all duration-150 flex items-center gap-2 cursor-pointer text-slate-200"
+                  >
+                    <History size={14} className="text-purple-400" />
+                    <span>History</span>
                   </button>
                 </div>
               )}
@@ -1135,6 +1154,7 @@ export default function App() {
               lineSpacing={preferences.headerLineSpacing || 1.2}
               zoom={preferences.zoom}
               theme={preferences.headerTheme || 'dark'}
+              docName={docName}
             />
           ) : isPaginating && pages.length === 0 ? (
             <div className="m-auto text-center text-slate-400 flex flex-col items-center gap-3 select-none">
@@ -1158,134 +1178,197 @@ export default function App() {
             />
           )}
 
-          {/* FLOATING ACTION HUD: ZOOM & RANGE SPECIFICATIONS */}
-          <div className="fixed bottom-12 right-4 sm:right-8 flex flex-col sm:flex-row items-end sm:items-center gap-2 print:hidden z-40 select-none">
-            {isPaginating && preferences.outputMode !== 'H' && (
-              <div className="bg-slate-900 text-white px-3 py-2 rounded-full shadow-lg flex items-center gap-2 text-[11px] font-medium border border-slate-700">
-                <Loader2 size={11} className="animate-spin text-emerald-400" />
-                <span>Compiling Layout...</span>
-              </div>
-            )}
-
-            {preferences.outputMode === 'H' ? (
-              /* Header Only Options HUD */
-              <div className="bg-white/95 backdrop-blur-md px-4 py-2.5 rounded-2xl shadow-xl border border-slate-200 flex flex-col sm:flex-row items-center gap-3.5 text-xs">
+          {/* FLOATING ACTION HUD: HEADER MODE (LEFT VERTICAL) VS POEM MODE (BOTTOM RIGHT) */}
+          {preferences.outputMode === 'H' ? (
+            /* Left Sided Vertical Toolbar for Header Preview Mode */
+            <div className="fixed left-2 sm:left-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 print:hidden z-40 select-none">
+              <div className="bg-white/95 backdrop-blur-md p-2 sm:p-2.5 rounded-2xl shadow-2xl border border-slate-200/90 flex flex-col items-center gap-2 text-xs w-[115px] sm:w-[125px]">
                 {/* Text Size Control */}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col items-center gap-1 w-full">
                   <span className="text-[9px] font-extrabold text-slate-400 tracking-wider uppercase">Text Size</span>
-                  <input 
-                    type="range"
-                    min="32"
-                    max="220"
-                    value={preferences.headerFontSize || 145}
-                    onChange={(e) => setPreferences(p => ({ ...p, headerFontSize: parseInt(e.target.value) }))}
-                    className="w-20 sm:w-24 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                  />
-                  <span className="text-xs font-extrabold text-slate-700 min-w-[32px]">{preferences.headerFontSize || 145}px</span>
+                  <div className="flex items-center justify-between w-full bg-slate-50 p-1 rounded-xl border border-slate-200">
+                    <button
+                      onClick={() => setPreferences(p => ({ ...p, headerFontSize: Math.max(32, (p.headerFontSize || 145) - 5) }))}
+                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer shadow-2xs border border-slate-200 shrink-0"
+                      title="Decrease Text Size (-5px)"
+                    >
+                      <Minus size={12} />
+                    </button>
+                    <span className="text-[11px] font-extrabold text-slate-800 text-center px-0.5 min-w-[32px]">
+                      {preferences.headerFontSize || 145}px
+                    </span>
+                    <button
+                      onClick={() => setPreferences(p => ({ ...p, headerFontSize: Math.min(220, (p.headerFontSize || 145) + 5) }))}
+                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer shadow-2xs border border-slate-200 shrink-0"
+                      title="Increase Text Size (+5px)"
+                    >
+                      <Plus size={12} />
+                    </button>
+                  </div>
                 </div>
 
-                <div className="h-3.5 w-px bg-slate-200 hidden sm:block"></div>
+                <div className="h-px w-full bg-slate-200"></div>
 
                 {/* Line Spacing Control */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[9px] font-extrabold text-slate-400 tracking-wider uppercase">Line Spacing</span>
-                  <input 
-                    type="range"
-                    min="1.0"
-                    max="2.5"
-                    step="0.1"
-                    value={preferences.headerLineSpacing || 1.2}
-                    onChange={(e) => setPreferences(p => ({ ...p, headerLineSpacing: parseFloat(e.target.value) }))}
-                    className="w-16 sm:w-20 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                  />
-                  <span className="text-xs font-extrabold text-slate-700 min-w-[28px]">{preferences.headerLineSpacing || 1.2}x</span>
+                <div className="flex flex-col items-center gap-1 w-full">
+                  <span className="text-[9px] font-extrabold text-slate-400 tracking-wider uppercase">Spacing</span>
+                  <div className="flex items-center justify-between w-full bg-slate-50 p-1 rounded-xl border border-slate-200">
+                    <button
+                      onClick={() => setPreferences(p => ({ ...p, headerLineSpacing: Math.max(1.0, parseFloat(((p.headerLineSpacing || 1.2) - 0.1).toFixed(1))) }))}
+                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer shadow-2xs border border-slate-200 shrink-0"
+                      title="Decrease Line Spacing (-0.1)"
+                    >
+                      <Minus size={12} />
+                    </button>
+                    <span className="text-[11px] font-extrabold text-slate-800 text-center px-0.5 min-w-[28px]">
+                      {(preferences.headerLineSpacing || 1.2).toFixed(1)}x
+                    </span>
+                    <button
+                      onClick={() => setPreferences(p => ({ ...p, headerLineSpacing: Math.min(2.5, parseFloat(((p.headerLineSpacing || 1.2) + 0.1).toFixed(1))) }))}
+                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer shadow-2xs border border-slate-200 shrink-0"
+                      title="Increase Line Spacing (+0.1)"
+                    >
+                      <Plus size={12} />
+                    </button>
+                  </div>
                 </div>
 
-                <div className="h-3.5 w-px bg-slate-200 hidden sm:block"></div>
+                <div className="h-px w-full bg-slate-200"></div>
 
                 {/* Theme Mode Control (Dark vs Light) */}
-                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 select-none">
-                  <button
-                    onClick={() => setPreferences(p => ({ ...p, headerTheme: 'light' }))}
-                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                      preferences.headerTheme === 'light'
-                        ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80'
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                    title="Light Mode (White Background & Black Text)"
-                  >
-                    <Sun size={11} />
-                    <span>Light</span>
-                  </button>
-                  <button
-                    onClick={() => setPreferences(p => ({ ...p, headerTheme: 'dark' }))}
-                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                      preferences.headerTheme !== 'light'
-                        ? 'bg-slate-900 text-white shadow-sm'
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                    title="Dark Mode (Black Background & White Text)"
-                  >
-                    <Moon size={11} />
-                    <span>Dark</span>
-                  </button>
+                <div className="flex flex-col items-center gap-1 w-full">
+                  <span className="text-[9px] font-extrabold text-slate-400 tracking-wider uppercase">Theme</span>
+                  <div className="grid grid-cols-2 gap-1 w-full bg-slate-100 p-1 rounded-xl border border-slate-200 select-none">
+                    <button
+                      onClick={() => setPreferences(p => ({ ...p, headerTheme: 'light' }))}
+                      className={`py-1 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                        preferences.headerTheme === 'light'
+                          ? 'bg-white text-slate-900 shadow-2xs border border-slate-200'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                      title="Light Mode"
+                    >
+                      <Sun size={11} />
+                      <span>Light</span>
+                    </button>
+                    <button
+                      onClick={() => setPreferences(p => ({ ...p, headerTheme: 'dark' }))}
+                      className={`py-1 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                        preferences.headerTheme !== 'light'
+                          ? 'bg-slate-900 text-white shadow-2xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                      title="Dark Mode"
+                    >
+                      <Moon size={11} />
+                      <span>Dark</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="h-3.5 w-px bg-slate-200 hidden sm:block"></div>
+                <div className="h-px w-full bg-slate-200"></div>
 
                 {/* Zoom Controls */}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col items-center gap-1 w-full">
                   <span className="text-[9px] font-extrabold text-slate-400 tracking-wider uppercase">Zoom</span>
-                  <button 
-                    onClick={() => setPreferences(p => ({ ...p, zoom: Math.max(50, p.zoom - 10) }))}
-                    className="hover:bg-slate-100 p-1 rounded-full text-slate-600 transition-colors cursor-pointer"
+                  <div className="flex items-center justify-between w-full bg-slate-50 p-1 rounded-xl border border-slate-200">
+                    <button 
+                      onClick={() => setPreferences(p => ({ ...p, zoom: Math.max(50, p.zoom - 10) }))}
+                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer shadow-2xs border border-slate-200 shrink-0"
+                      title="Zoom Out"
+                    >
+                      <ZoomOut size={12} />
+                    </button>
+                    <span className="text-[11px] font-extrabold text-slate-800 text-center px-0.5 min-w-[28px]">
+                      {preferences.zoom}%
+                    </span>
+                    <button 
+                      onClick={() => setPreferences(p => ({ ...p, zoom: Math.min(150, p.zoom + 10) }))}
+                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer shadow-2xs border border-slate-200 shrink-0"
+                      title="Zoom In"
+                    >
+                      <ZoomIn size={12} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="h-px w-full bg-slate-200"></div>
+
+                {/* Quick Slide Image Export Actions */}
+                <div className="flex flex-col gap-1.5 w-full">
+                  <button
+                    onClick={() => exportAllHeaderImages({
+                      headers: extractedHeaders,
+                      fontSize: preferences.headerFontSize || 145,
+                      lineSpacing: preferences.headerLineSpacing || 1.2,
+                      theme: preferences.headerTheme || 'dark',
+                      format: 'png',
+                      docName
+                    })}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white w-full py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 shadow-2xs active:scale-95"
+                    title="Export All Header Slides as PNG"
                   >
-                    <ZoomOut size={13} />
+                    <Download size={11} />
+                    <span>PNG</span>
                   </button>
-                  <span className="text-xs font-extrabold text-slate-700 min-w-[28px] text-center">{preferences.zoom}%</span>
-                  <button 
-                    onClick={() => setPreferences(p => ({ ...p, zoom: Math.min(150, p.zoom + 10) }))}
-                    className="hover:bg-slate-100 p-1 rounded-full text-slate-600 transition-colors cursor-pointer"
+                  <button
+                    onClick={() => exportAllHeaderImages({
+                      headers: extractedHeaders,
+                      fontSize: preferences.headerFontSize || 145,
+                      lineSpacing: preferences.headerLineSpacing || 1.2,
+                      theme: preferences.headerTheme || 'dark',
+                      format: 'jpg',
+                      docName
+                    })}
+                    className="bg-blue-600 hover:bg-blue-500 text-white w-full py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 shadow-2xs active:scale-95"
+                    title="Export All Header Slides as JPG"
                   >
-                    <ZoomIn size={13} />
+                    <Download size={11} />
+                    <span>JPG</span>
                   </button>
                 </div>
               </div>
-            ) : (
-              /* Full Poem HUD */
-              <>
-                {/* Zoom Slider Action panel */}
-                <div className="bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-lg border border-slate-200 flex items-center gap-2.5">
-                  <span className="text-[9px] font-extrabold text-slate-400 tracking-wider">ZOOM</span>
-                  <button 
-                    onClick={() => setPreferences(p => ({ ...p, zoom: Math.max(50, p.zoom - 10) }))}
-                    className="hover:bg-slate-100 p-1 rounded-full text-slate-600 transition-colors cursor-pointer"
-                  >
-                    <ZoomOut size={13} />
-                  </button>
-                  <span className="text-[11px] font-extrabold text-slate-700 min-w-[28px] text-center">{preferences.zoom}%</span>
-                  <button 
-                    onClick={() => setPreferences(p => ({ ...p, zoom: Math.min(150, p.zoom + 10) }))}
-                    className="hover:bg-slate-100 p-1 rounded-full text-slate-600 transition-colors cursor-pointer"
-                  >
-                    <ZoomIn size={13} />
-                  </button>
+            </div>
+          ) : (
+            /* Full Poem HUD */
+            <div className="fixed bottom-12 right-4 sm:right-8 flex flex-col sm:flex-row items-end sm:items-center gap-2 print:hidden z-40 select-none">
+              {isPaginating && (
+                <div className="bg-slate-900 text-white px-3 py-2 rounded-full shadow-lg flex items-center gap-2 text-[11px] font-medium border border-slate-700">
+                  <Loader2 size={11} className="animate-spin text-emerald-400" />
+                  <span>Compiling Layout...</span>
                 </div>
+              )}
+              {/* Zoom Slider Action panel */}
+              <div className="bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-lg border border-slate-200 flex items-center gap-2.5">
+                <span className="text-[9px] font-extrabold text-slate-400 tracking-wider">ZOOM</span>
+                <button 
+                  onClick={() => setPreferences(p => ({ ...p, zoom: Math.max(50, p.zoom - 10) }))}
+                  className="hover:bg-slate-100 p-1 rounded-full text-slate-600 transition-colors cursor-pointer"
+                >
+                  <ZoomOut size={13} />
+                </button>
+                <span className="text-[11px] font-extrabold text-slate-700 min-w-[28px] text-center">{preferences.zoom}%</span>
+                <button 
+                  onClick={() => setPreferences(p => ({ ...p, zoom: Math.min(150, p.zoom + 10) }))}
+                  className="hover:bg-slate-100 p-1 rounded-full text-slate-600 transition-colors cursor-pointer"
+                >
+                  <ZoomIn size={13} />
+                </button>
+              </div>
 
-                {/* Dynamic Font Range Indicators */}
-                <div className="bg-white/95 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-slate-200 flex items-center gap-2">
-                  <span className="text-[9px] font-extrabold text-slate-400 tracking-wider">FONT RANGE</span>
-                  <span className="text-xs font-bold text-emerald-600">
-                    {preferences.minFontSize}-{preferences.maxFontSize}pt
-                  </span>
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
-                  <span className="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                    Active: {mainFontSize}pt
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
+              {/* Dynamic Font Range Indicators */}
+              <div className="bg-white/95 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-slate-200 flex items-center gap-2">
+                <span className="text-[9px] font-extrabold text-slate-400 tracking-wider">FONT RANGE</span>
+                <span className="text-xs font-bold text-emerald-600">
+                  {preferences.minFontSize}-{preferences.maxFontSize}pt
+                </span>
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
+                <span className="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                  Active: {mainFontSize}pt
+                </span>
+              </div>
+            </div>
+          )}
         </section>
       </main>
 
@@ -1735,42 +1818,101 @@ export default function App() {
                 </label>
               </div>
 
-              {/* Option A: PDF Vector layout */}
-              <div className="border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/5 p-4 rounded-xl transition-all duration-150 flex items-start gap-3.5">
-                <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0 select-none">
-                  <Printer size={18} />
+              {/* Option A: PDF Vector layout (Hidden in Header Mode) */}
+              {preferences.outputMode !== 'H' && (
+                <div className="border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/5 p-4 rounded-xl transition-all duration-150 flex items-start gap-3.5">
+                  <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0 select-none">
+                    <Printer size={18} />
+                  </div>
+                  <div className="flex-grow">
+                    <h4 className="font-extrabold text-sm text-slate-900">High-Fidelity PDF Document</h4>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Generate vector-perfect printable A4 PDF documents with custom margins.
+                    </p>
+                    <button
+                      onClick={handleLaunchPrint}
+                      className="mt-3 bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1 shadow-sm cursor-pointer"
+                    >
+                      <Printer size={12} />
+                      <span>Launch PDF Print Settings</span>
+                    </button>
+                  </div>
                 </div>
-                <div className="flex-grow">
-                  <h4 className="font-extrabold text-sm text-slate-900">High-Fidelity PDF Document</h4>
-                  <button
-                    onClick={handleLaunchPrint}
-                    className="mt-3 bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1 shadow-sm cursor-pointer"
-                  >
-                    <Printer size={12} />
-                    <span>Launch PDF Print Settings</span>
-                  </button>
-                </div>
-              </div>
+              )}
 
-              {/* Option B: Microsoft Word Document (.docx) */}
+              {/* Option B: Microsoft Word Document (.docx) (Hidden in Header Mode) */}
+              {preferences.outputMode !== 'H' && (
+                <div className="border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/5 p-4 rounded-xl transition-all duration-150 flex items-start gap-3.5">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0 select-none">
+                    <FileText size={18} />
+                  </div>
+                  <div className="flex-grow">
+                    <h4 className="font-extrabold text-sm text-slate-900">Microsoft Word Document (.docx)</h4>
+                    <button
+                      onClick={handleLaunchDocx}
+                      disabled={isGeneratingDocx}
+                      className="mt-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1 shadow-sm cursor-pointer"
+                    >
+                      {isGeneratingDocx ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Download size={12} />
+                      )}
+                      <span>{isGeneratingDocx ? "Compiling XML..." : "Compile & Download .docx"}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Option C: Header Only Slide Images (PNG / JPG) */}
               <div className="border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/5 p-4 rounded-xl transition-all duration-150 flex items-start gap-3.5">
-                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0 select-none">
-                  <FileText size={18} />
+                <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0 select-none">
+                  <Image size={18} />
                 </div>
                 <div className="flex-grow">
-                  <h4 className="font-extrabold text-sm text-slate-900">Microsoft Word Document (.docx)</h4>
-                  <button
-                    onClick={handleLaunchDocx}
-                    disabled={isGeneratingDocx}
-                    className="mt-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1 shadow-sm cursor-pointer"
-                  >
-                    {isGeneratingDocx ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <Download size={12} />
-                    )}
-                    <span>{isGeneratingDocx ? "Compiling XML..." : "Compile & Download .docx"}</span>
-                  </button>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-extrabold text-sm text-slate-900">Header Only Slide Images</h4>
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      1920 × 1080 16:9
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      onClick={() => {
+                        exportAllHeaderImages({
+                          headers: extractedHeaders,
+                          fontSize: preferences.headerFontSize || 145,
+                          lineSpacing: preferences.headerLineSpacing || 1.2,
+                          theme: preferences.headerTheme || 'dark',
+                          format: 'png',
+                          docName
+                        });
+                        setShowExportModal(false);
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <Download size={13} />
+                      <span>PNG {extractedHeaders.length > 1 ? `Package (.zip)` : `Slide`}</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        exportAllHeaderImages({
+                          headers: extractedHeaders,
+                          fontSize: preferences.headerFontSize || 145,
+                          lineSpacing: preferences.headerLineSpacing || 1.2,
+                          theme: preferences.headerTheme || 'dark',
+                          format: 'jpg',
+                          docName
+                        });
+                        setShowExportModal(false);
+                      }}
+                      className="bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <Download size={13} />
+                      <span>JPG {extractedHeaders.length > 1 ? `Package (.zip)` : `Slide`}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1904,18 +2046,10 @@ export default function App() {
                       ? `${baseName}_${getFormattedTimestamp()}` 
                       : baseName;
 
-                    const isHeaderMode = preferences.outputMode === 'H';
-                    if (isHeaderMode) {
-                      document.body.classList.add('mode-header-only');
-                    }
-
                     triggerSystemPrint(
                       () => {},
                       () => {
                         document.title = originalTitle;
-                        if (isHeaderMode) {
-                          document.body.classList.remove('mode-header-only');
-                        }
                       }
                     );
                   }}
