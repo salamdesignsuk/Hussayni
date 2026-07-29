@@ -35,6 +35,7 @@ export type DocumentItem =
 
 export interface UserPreferences {
   theme: 'slate' | 'warm' | 'dark' | 'classic';
+  language?: 'en' | 'ar';
   minFontSize: number;
   maxFontSize: number;
   paragraphSpacing: 'compact' | 'normal' | 'relaxed';
@@ -50,6 +51,7 @@ export interface UserPreferences {
   headerFontSize?: number;
   headerLineSpacing?: number;
   headerTheme?: 'dark' | 'light';
+  showCompilationLog?: boolean;
 }
 
 export interface RecentDocument {
@@ -63,6 +65,7 @@ export interface RecentDocument {
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
   theme: 'slate',
+  language: 'en',
   minFontSize: 16,
   maxFontSize: 32,
   paragraphSpacing: 'normal',
@@ -77,5 +80,6 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   outputMode: 'P',
   headerFontSize: 145,
   headerLineSpacing: 1.2,
-  headerTheme: 'dark'
+  headerTheme: 'dark',
+  showCompilationLog: true
 };

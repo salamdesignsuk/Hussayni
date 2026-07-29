@@ -1,5 +1,3 @@
-import JSZip from 'jszip';
-
 export interface HeaderExportOptions {
   headers: string[];
   fontSize: number;
@@ -95,38 +93,16 @@ export async function exportSingleHeaderImage(
 }
 
 /**
- * Exports all header slides as a ZIP file containing PNG or JPG images,
- * or as individual image downloads if there is only 1 slide.
+ * Exports all header slides as individual PNG or JPG image downloads.
  */
 export async function exportAllHeaderImages(options: HeaderExportOptions) {
   const displayHeaders = options.headers.length > 0 ? options.headers : [options.docName || 'عنوان القصيدة'];
 
-  if (displayHeaders.length === 1) {
-    await exportSingleHeaderImage(displayHeaders[0], 0, options);
-    return;
-  }
-
-  const zip = new JSZip();
-  const ext = options.format;
-  const sanitized = (options.docName || 'Header_Slides').replace(/\s+/g, '_');
-
   for (let i = 0; i < displayHeaders.length; i++) {
-    const headerText = displayHeaders[i];
-    const canvas = generateHeaderCanvas(
-      headerText,
-      options.fontSize,
-      options.lineSpacing,
-      options.theme
-    );
-    const blob = await canvasToBlob(canvas, options.format);
-    zip.file(`${sanitized}_Slide_${i + 1}.${ext}`, blob);
+    await exportSingleHeaderImage(displayHeaders[i], i, options);
+    if (i < displayHeaders.length - 1) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
   }
-
-  const zipBlob = await zip.generateAsync({ type: 'blob' });
-  const url = URL.createObjectURL(zipBlob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${sanitized}_Slides_${options.format.toUpperCase()}.zip`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+

@@ -31,7 +31,11 @@ import {
   Type,
   Sun,
   Moon,
-  Image
+  Image,
+  X,
+  UploadCloud,
+  CheckCircle2,
+  Globe
 } from 'lucide-react';
 import { parseMarkup } from './utils/parser';
 import { paginateDocument } from './utils/paginator';
@@ -48,9 +52,13 @@ import {
   DEFAULT_PREFERENCES,
   RecentDocument
 } from './utils/documentModel';
+import { MobileFooterSheet } from './components/MobileFooterSheet';
+import { MobileBottomToolbar } from './components/MobileBottomToolbar';
+import { MobilePreviewToolbar } from './components/MobilePreviewToolbar';
+import { DesktopPreviewToolbar } from './components/DesktopPreviewToolbar';
 
 // Injected globals from Vite define, with safe development fallbacks
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '2.0.0';
 const BUILD_DATE = typeof __BUILD_DATE__ !== 'undefined' ? __BUILD_DATE__ : '2026-07-16';
 const COMMIT_HASH = typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : 'f0e2d1c';
 const BUILD_ENV = typeof __BUILD_ENV__ !== 'undefined' ? __BUILD_ENV__ : 'development';
@@ -71,6 +79,7 @@ F = سورة الفلق`;
 export default function App() {
   // PWA & Connection Manager Hook
   const pwa = usePwa();
+  const [dismissedUpdate, setDismissedUpdate] = useState(false);
 
   // Document & Code States
   const [code, setCode] = useState<string>(() => {
@@ -79,7 +88,7 @@ export default function App() {
   });
 
   const [docName, setDocName] = useState<string>(() => {
-    return localStorage.getItem('hussayni_doc_name') || 'Document_Name';
+    return localStorage.getItem('hussayni_doc_name') || 'Poem_Name';
   });
 
   // Custom page footer texts
@@ -101,19 +110,74 @@ export default function App() {
   const [preferences, setPreferences] = useState<UserPreferences>(() => {
     const saved = localStorage.getItem('hussayni_preferences');
     const isMobileViewport = typeof window !== 'undefined' && window.innerWidth < 1024;
-    const initialDefault = isMobileViewport 
-      ? { ...DEFAULT_PREFERENCES, showLineNumbers: false, zoom: 50 } 
-      : DEFAULT_PREFERENCES;
-
+    
     if (saved) {
       try {
-        return { ...initialDefault, ...JSON.parse(saved) };
+        const parsed = JSON.parse(saved);
+        // On mobile viewport, default showLineNumbers to false unless explicitly saved as a custom preference
+        if (isMobileViewport && parsed.showLineNumbers === undefined) {
+          parsed.showLineNumbers = false;
+        }
+        return { 
+          ...DEFAULT_PREFERENCES, 
+          ...(isMobileViewport ? { showLineNumbers: false, zoom: 50 } : {}), 
+          ...parsed 
+        };
       } catch (e) {
-        return initialDefault;
+        return isMobileViewport ? { ...DEFAULT_PREFERENCES, showLineNumbers: false, zoom: 50 } : DEFAULT_PREFERENCES;
       }
     }
-    return initialDefault;
+    return isMobileViewport ? { ...DEFAULT_PREFERENCES, showLineNumbers: false, zoom: 50 } : DEFAULT_PREFERENCES;
   });
+
+  // Mobile Preview Popup state
+  const [isPreviewPopupOpen, setIsPreviewPopupOpen] = useState<boolean>(false);
+
+  // Desktop Editor Resizable Width (Minimum 450px)
+  const [editorWidth, setEditorWidth] = useState<number>(450);
+  const [isResizing, setIsResizing] = useState<boolean>(false);
+
+  const handleMouseDownResizer = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const newWidth = Math.max(450, Math.min(e.clientX, window.innerWidth - 320));
+      setEditorWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  // Launch Title Splash state: title appears on launch for 2 seconds then smoothly cross-fades to current filename
+  const [isSplashTitle, setIsSplashTitle] = useState<boolean>(true);
+  // Document save status state: 'saved' | 'saving' | 'unsaved'
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [lastSavedMarkup, setLastSavedMarkup] = useState<string>('');
+  // Mobile Footer Settings Bottom Sheet state
+  const [showMobileFooterSheet, setShowMobileFooterSheet] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Cross-fade launch title after exactly 2 seconds
+    const timer = setTimeout(() => {
+      setIsSplashTitle(false);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Layout and compiled pages
   const [pages, setPages] = useState<ParsedPage[]>([]);
@@ -228,16 +292,33 @@ export default function App() {
     };
   }, [code, preferences.minFontSize, preferences.maxFontSize, preferences.paragraphSpacing]);
 
+  // Track modifications for save status
+  useEffect(() => {
+    if (lastSavedMarkup && (code !== lastSavedMarkup)) {
+      setSaveStatus('unsaved');
+    }
+  }, [code, docName, leftFooterText, rightFooterText]);
+
   // Persist content & updates to Local Storage (Autosave)
   useEffect(() => {
-    localStorage.setItem('hussayni_markup', code);
-    localStorage.setItem('hussayni_doc_name', docName);
-    localStorage.setItem('hussayni_left_footer', leftFooterText);
-    localStorage.setItem('hussayni_right_footer', rightFooterText);
-    
-    const now = new Date();
-    localStorage.setItem('hussayni_autosave_time', now.toISOString());
-    updateStorageUsage();
+    const timer = setTimeout(() => {
+      setSaveStatus('saving');
+      localStorage.setItem('hussayni_markup', code);
+      localStorage.setItem('hussayni_doc_name', docName);
+      localStorage.setItem('hussayni_left_footer', leftFooterText);
+      localStorage.setItem('hussayni_right_footer', rightFooterText);
+      
+      const now = new Date();
+      localStorage.setItem('hussayni_autosave_time', now.toISOString());
+      updateStorageUsage();
+      setLastSavedMarkup(code);
+
+      setTimeout(() => {
+        setSaveStatus('saved');
+      }, 350);
+    }, 1000);
+
+    return () => clearTimeout(timer);
   }, [code, docName, leftFooterText, rightFooterText]);
 
   // Persist preferences to Local Storage
@@ -312,7 +393,7 @@ export default function App() {
       title: "Create New Document?",
       message: "Are you sure you want to create a new file? Current work will be backed up to your history list.",
       onConfirm: () => {
-        setDocName('Document_Name');
+        setDocName('Poem_Name');
         setCode(DEFAULT_MARKUP);
         setLeftFooterText('');
         setRightFooterText('');
@@ -471,7 +552,7 @@ export default function App() {
     if (window.confirm("CRITICAL WARNING: This will permanently wipe your document history, active editor buffer, and customized font ranges. Continue?")) {
       localStorage.clear();
       setCode(DEFAULT_MARKUP);
-      setDocName('Document_Name');
+      setDocName('Poem_Name');
       setLeftFooterText('');
       setRightFooterText('');
       setRecentDocs([]);
@@ -479,6 +560,67 @@ export default function App() {
       setShowSettings(false);
       triggerToast("Application data reset successfully!");
     }
+  };
+
+  // Mobile Bottom Toolbar Helpers
+  const handleInsertTag = (prefix: string) => {
+    if (!textareaRef.current) return;
+    const textarea = textareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const val = textarea.value;
+    
+    const before = val.substring(0, start);
+    const needsNewline = before.length > 0 && !before.endsWith('\n');
+    const inserted = (needsNewline ? '\n' : '') + prefix;
+    
+    // Check if the textarea is focused
+    const isFocused = document.activeElement === textarea;
+    if (!isFocused) {
+      textarea.focus();
+    }
+    
+    try {
+      // Execute native insert command to preserve undo/redo history stack!
+      const success = document.execCommand('insertText', false, inserted);
+      if (!success) {
+        throw new Error('execCommand returned false');
+      }
+    } catch (e) {
+      // Fallback to manual insertion if execCommand is not supported
+      const after = val.substring(end);
+      const newCode = before + inserted + after;
+      setCode(newCode);
+      
+      setTimeout(() => {
+        const newPos = start + inserted.length;
+        textarea.setSelectionRange(newPos, newPos);
+      }, 10);
+    }
+  };
+
+  const handleUndo = () => {
+    if (textareaRef.current) {
+      document.execCommand('undo');
+    }
+  };
+
+  const handleRedo = () => {
+    if (textareaRef.current) {
+      document.execCommand('redo');
+    }
+  };
+
+  const handleClearText = () => {
+    if (!code.trim()) return;
+    setConfirmConfig({
+      title: "Clear Editor",
+      message: "Are you sure you want to clear all text in the editor?",
+      onConfirm: () => {
+        setCode('');
+        triggerToast("Editor cleared successfully");
+      }
+    });
   };
 
   // Export Application Settings file (.json)
@@ -665,31 +807,35 @@ export default function App() {
   const lineNumbers = Array.from({ length: linesCount }, (_, i) => i + 1);
 
   return (
-    <div id="app-container" className={`flex flex-col h-screen ${themeClasses.appBg} font-sans overflow-hidden transition-colors duration-200`}>
+    <div id="app-container" className={`flex flex-col h-screen h-[100dvh] ${themeClasses.appBg} font-sans overflow-hidden transition-colors duration-200`}>
       
       {/* Dynamic Hidden File Inputs */}
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".txt" className="hidden" />
       <input type="file" ref={settingsInputRef} onChange={handleImportPreferencesChange} accept=".json" className="hidden" />
 
       {/* SERVICE WORKER PWA UPDATE BANNER */}
-      {pwa.needRefresh && (
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white px-6 py-2.5 flex items-center justify-between shadow-lg z-[99999] select-none shrink-0 border-b border-white/10 animate-fade-in print:hidden">
-          <div className="flex items-center gap-3">
-            <Sparkles className="text-emerald-300 animate-pulse" size={18} />
-            <span className="text-xs font-semibold tracking-wide">
-              A newer and more polished version of Hussayni is ready to install!
+      {pwa.needRefresh && !dismissedUpdate && (
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white px-4 sm:px-6 h-14 flex items-center justify-between shadow-md z-[99999] select-none shrink-0 border-b border-white/10 animate-fade-in print:hidden">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <Sparkles className="text-emerald-300 animate-pulse shrink-0" size={16} />
+            <span className="text-xs sm:text-sm font-bold tracking-wide truncate">
+              New version available!
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <button
               onClick={() => pwa.updateServiceWorker(true)}
-              className="bg-white text-emerald-800 hover:bg-emerald-50 px-3.5 py-1 rounded-md text-xs font-bold transition-all duration-150 shadow-sm cursor-pointer"
+              className="bg-white text-emerald-800 hover:bg-emerald-50 px-3 py-1 rounded-lg text-xs font-black transition-all duration-150 shadow-xs cursor-pointer h-8 flex items-center"
             >
-              Update Now
+              Update
             </button>
             <button
-              onClick={() => { triggerToast("Update delayed. Will apply on next visit."); pwa.updateServiceWorker(false); }}
-              className="text-white/80 hover:text-white px-3 py-1 rounded text-xs font-medium cursor-pointer"
+              onClick={() => { 
+                setDismissedUpdate(true); 
+                triggerToast("Update delayed. Will apply next time you open the app."); 
+                pwa.updateServiceWorker(false); 
+              }}
+              className="text-white/80 hover:text-white px-2.5 py-1 rounded-lg text-xs font-semibold hover:bg-white/10 transition-all cursor-pointer h-8 flex items-center"
             >
               Later
             </button>
@@ -698,23 +844,80 @@ export default function App() {
       )}
 
       {/* HEADER CONTROLS */}
-      <header className={`h-14 ${themeClasses.headerBg} flex items-center justify-between px-3 sm:px-6 shadow-md shrink-0 select-none print:hidden z-30`}>
-        <div className="flex items-center gap-2 sm:gap-4">
-          <div className="w-8 h-8 bg-emerald-500 rounded flex items-center justify-center font-bold text-lg text-white shadow-inner select-none shrink-0">H</div>
+      <header className={`h-14 ${themeClasses.headerBg} flex items-center justify-between px-2 sm:px-6 shadow-md shrink-0 select-none print:hidden z-30 relative`}>
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           
-          {/* App Title & Subtitle */}
-          <div className="flex flex-col justify-center select-none">
-            <h1 className="text-white font-extrabold text-sm leading-tight tracking-wide">Hussayni</h1>
+          {/* Logo Button */}
+          <div
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-black text-base sm:text-lg text-white shrink-0 bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-700 shadow-md shadow-emerald-500/30 ring-1 ring-emerald-400/40 select-none"
+          >
+            H
           </div>
+          
+          {/* App Title & Subtitle with 2-second Launch Fade Effect to Filename & Save Status */}
+          <div className="relative flex items-center shrink-0 min-w-0">
+            {/* Launch Splash Title: "Hussayni Editor" (0 to 2s) */}
+            <div 
+              className={`transition-all duration-700 ease-in-out select-none flex items-center ${
+                isSplashTitle 
+                  ? 'opacity-100 scale-100 pointer-events-auto' 
+                  : 'opacity-0 scale-95 pointer-events-none absolute left-0 top-1/2 -translate-y-1/2'
+              }`}
+            >
+              <h1 className="text-white font-extrabold text-xs sm:text-sm leading-tight tracking-wide whitespace-nowrap">
+                Hussayni Editor
+              </h1>
+            </div>
+
+              {/* Filename & Save Status (Cross-fades in after 2s) */}
+              <div 
+                className={`flex items-center gap-2 transition-all duration-700 ease-in-out ${
+                  !isSplashTitle 
+                    ? 'opacity-100 scale-100 pointer-events-auto' 
+                    : 'opacity-0 scale-95 pointer-events-none absolute left-0 top-1/2 -translate-y-1/2'
+                }`}
+              >
+                <input 
+                  type="text"
+                  value={docName}
+                  onChange={(e) => setDocName(e.target.value)}
+                  className="bg-transparent text-white font-extrabold text-xs sm:text-sm outline-none w-20 sm:w-32 focus:border-b focus:border-emerald-400 p-0 m-0 truncate"
+                  title="Click to rename document"
+                  placeholder="Poem_Name"
+                />
+
+                {/* Save Status Badge */}
+                <div className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900/90 border border-slate-700/80 shrink-0 select-none">
+                  {saveStatus === 'saving' && (
+                    <span className="text-amber-400 flex items-center gap-1">
+                      <Loader2 size={10} className="animate-spin" />
+                      <span className="hidden sm:inline">Saving…</span>
+                    </span>
+                  )}
+                  {saveStatus === 'saved' && (
+                    <span className="text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 size={10} />
+                      <span className="hidden sm:inline">Saved</span>
+                    </span>
+                  )}
+                  {saveStatus === 'unsaved' && (
+                    <span className="text-slate-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                      <span className="hidden sm:inline">Unsaved</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
 
           {/* Connection badge */}
           {pwa.isOffline ? (
-            <span className="flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+            <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
               <WifiOff size={10} />
               <span className="hidden sm:inline">Offline Mode</span>
             </span>
           ) : (
-            <span className="flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+            <span className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
               <Wifi size={10} />
               <span className="hidden sm:inline">Connected</span>
             </span>
@@ -729,7 +932,7 @@ export default function App() {
         </div>
 
         {/* Workspace Quick Actions */}
-        <div className="flex items-center gap-1 sm:gap-1.5">
+        <div className={`flex items-center gap-1 sm:gap-1.5 shrink-0 transition-opacity duration-500 ${isSplashTitle ? 'opacity-90' : 'opacity-100'}`}>
           
           {/* Recent Document Selector Dropdown (Desktop) */}
           {!isMobile && (
@@ -746,53 +949,53 @@ export default function App() {
                 <span className="hidden md:inline">History</span>
                 <ChevronDown size={11} className={`transition-transform duration-150 ${showRecentMenu ? 'rotate-180' : ''}`} />
               </button>
-            </div>
-          )}
 
-          {/* Recent Document Drafts Modal/Dropdown container when triggered */}
-          {showRecentMenu && (
-            <div className="absolute top-12 right-2 sm:right-auto sm:left-40 w-64 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-2.5 z-50 text-slate-200 select-none">
-              <p className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
-                <span>Recent Drafts ({recentDocs.length})</span>
-                <button 
-                  onClick={() => setShowRecentMenu(false)}
-                  className="text-slate-500 hover:text-slate-300 text-xs px-1"
-                >
-                  ✕
-                </button>
-              </p>
-              <div className="mt-1.5 space-y-0.5 max-h-60 overflow-y-auto">
-                {recentDocs.length === 0 ? (
-                  <p className="text-xs text-slate-500 p-3 text-center">No cached document logs found.</p>
-                ) : (
-                  recentDocs.map((doc) => (
-                    <div 
-                      key={doc.id}
-                      onClick={() => handleLoadRecent(doc)}
-                      className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-left ${
-                        doc.name === docName ? 'bg-emerald-950/40 text-emerald-300' : 'hover:bg-white/5 text-slate-300'
-                      }`}
+              {/* Recent Document Drafts Dropdown directly anchored under History button */}
+              {showRecentMenu && (
+                <div className="absolute top-full right-0 mt-1.5 w-64 sm:w-72 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-2.5 z-50 text-slate-200 select-none">
+                  <p className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
+                    <span>Recent Drafts ({recentDocs.length})</span>
+                    <button 
+                      onClick={() => setShowRecentMenu(false)}
+                      className="text-slate-500 hover:text-slate-300 text-xs px-1"
                     >
-                      <div className="flex items-center gap-2 overflow-hidden">
-                         <FileText size={13} className="shrink-0 text-slate-500" />
-                        <div className="overflow-hidden">
-                          <p className="text-xs font-medium truncate">{doc.name}</p>
-                          <p className="text-[9px] text-slate-500">
-                            {new Date(doc.lastSaved).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </p>
+                      ✕
+                    </button>
+                  </p>
+                  <div className="mt-1.5 space-y-0.5 max-h-60 overflow-y-auto">
+                    {recentDocs.length === 0 ? (
+                      <p className="text-xs text-slate-500 p-3 text-center">No cached document logs found.</p>
+                    ) : (
+                      recentDocs.map((doc) => (
+                        <div 
+                          key={doc.id}
+                          onClick={() => handleLoadRecent(doc)}
+                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-left ${
+                            doc.name === docName ? 'bg-emerald-950/40 text-emerald-300' : 'hover:bg-white/5 text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 overflow-hidden">
+                             <FileText size={13} className="shrink-0 text-slate-500" />
+                            <div className="overflow-hidden">
+                              <p className="text-xs font-medium truncate">{doc.name}</p>
+                              <p className="text-[9px] text-slate-500">
+                                {new Date(doc.lastSaved).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={(e) => handleDeleteRecent(doc.id, e)}
+                            className="p-1 hover:bg-white/10 rounded text-slate-500 hover:text-rose-400 cursor-pointer"
+                            title="Wipe record"
+                          >
+                            <Trash2 size={11} />
+                          </button>
                         </div>
-                      </div>
-                      <button 
-                        onClick={(e) => handleDeleteRecent(doc.id, e)}
-                        className="p-1 hover:bg-white/10 rounded text-slate-500 hover:text-rose-400 cursor-pointer"
-                        title="Wipe record"
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -891,42 +1094,14 @@ export default function App() {
 
           <div className="h-4 w-px bg-slate-700 mx-0.5 sm:mx-1 hidden sm:block"></div>
 
-          {/* OUTPUT MODE SWITCH: H (Header Only 1920x1080) vs P (Full Poem A4) */}
-          <div className="bg-slate-800/90 p-0.5 rounded-lg border border-slate-700 flex items-center shadow-inner select-none">
-            <button
-              onClick={() => setPreferences(p => ({ ...p, outputMode: 'H' }))}
-              className={`px-2 py-1 rounded text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
-                preferences.outputMode === 'H'
-                  ? 'bg-emerald-500 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-              }`}
-              title="Header Only Output Mode (1920x1080 Landscape)"
-            >
-              <Type size={12} />
-              <span className="font-extrabold">H</span>
-            </button>
-            <button
-              onClick={() => setPreferences(p => ({ ...p, outputMode: 'P' }))}
-              className={`px-2 py-1 rounded text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
-                preferences.outputMode !== 'H'
-                  ? 'bg-emerald-500 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-              }`}
-              title="Full Poem Output Mode (A4 Paginated Document)"
-            >
-              <FileText size={12} />
-              <span className="font-extrabold">P</span>
-            </button>
-          </div>
-
-          {/* EXPORT OVERLAY ACTION BUTTON */}
+          {/* PERSISTENT PUBLISH ACTION BUTTON */}
           <button 
             onClick={() => setShowExportModal(true)}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 rounded-lg text-xs font-bold transition-all duration-150 flex items-center gap-1 sm:gap-1.5 shadow-sm cursor-pointer"
-            title="Export compiled document to ODT or high-fidelity A4 vector print PDF"
+            className="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1 sm:gap-1.5 shadow-md cursor-pointer shrink-0"
+            title="Publish and export compiled document to PDF, ODT, or DOCX"
           >
-            <Printer size={13} />
-            <span className="hidden xs:inline">Compile &amp; Export</span>
+            <UploadCloud size={14} className="shrink-0" />
+            <span className="font-black">Publish</span>
           </button>
 
           {/* SETTINGS GEAR ICON */}
@@ -940,125 +1115,130 @@ export default function App() {
         </div>
       </header>
 
-      {/* MOBILE TAB SWITCHER */}
-      {isMobile && (
-        <div className={`flex shrink-0 h-11 select-none z-20 print:hidden border-b ${themeClasses.editorHeader}`}>
-          <button
-            onClick={() => setActiveTab('editor')}
-            className={`flex-1 flex items-center justify-center gap-2 text-xs font-bold transition-all duration-150 border-b-2 ${
-              activeTab === 'editor'
-                ? 'border-emerald-500 bg-emerald-500/5 ' + themeClasses.docNameText
-                : 'border-transparent ' + themeClasses.inactiveTab
-            }`}
-          >
-            <FileText size={14} />
-            <span>Editor</span>
-            {errors.filter(e => e.severity === 'error').length > 0 && (
-              <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[16px] text-center">
-                {errors.filter(e => e.severity === 'error').length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('preview')}
-            className={`flex-1 flex items-center justify-center gap-2 text-xs font-bold transition-all duration-150 border-b-2 ${
-              activeTab === 'preview'
-                ? 'border-emerald-500 bg-emerald-500/5 ' + themeClasses.docNameText
-                : 'border-transparent ' + themeClasses.inactiveTab
-            }`}
-          >
-            <BookOpen size={14} />
-            <span>Preview</span>
-          </button>
-        </div>
-      )}
-
       {/* MAIN WORKSPACE CONTENT */}
-      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative min-h-0">
         
+        {/* OPTION 4: FLOATING OVERLAY SWITCHER FOR MOBILE (Bottom Center) */}
+        {isMobile && !isPreviewPopupOpen && (
+          <div className="fixed bottom-[calc(3.25rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-50 bg-slate-900 p-1 rounded-full border border-slate-700/80 flex items-center shadow-2xl select-none print:hidden">
+            <button
+              type="button"
+              onClick={() => setActiveTab('editor')}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'editor'
+                  ? 'bg-emerald-500 text-slate-950 font-black shadow-sm'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              <FileText size={13} />
+              <span>Editor</span>
+              {errors.filter(e => e.severity === 'error').length > 0 && (
+                <span className="bg-rose-500 text-white text-[8px] font-black px-1 rounded-full min-w-[14px] text-center">
+                  {errors.filter(e => e.severity === 'error').length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('preview')}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'preview'
+                  ? 'bg-emerald-500 text-slate-950 font-black shadow-sm'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              <BookOpen size={13} />
+              <span>Preview</span>
+            </button>
+          </div>
+        )}
+      
         {/* LEFT COMPARTMENT: MARKUP TEXT EDITOR */}
-        <section className={`w-full lg:w-[450px] flex-1 lg:flex-none flex-col border-r border-slate-200 ${themeClasses.editorBg} print:hidden lg:shrink-0 ${isMobile && activeTab !== 'editor' ? 'hidden' : 'flex'}`}>
+        <section 
+          style={!isMobile ? { width: `${editorWidth}px` } : undefined}
+          className={`flex-1 h-full w-full lg:flex-none flex-col border-r border-slate-200 ${themeClasses.editorBg} print:hidden lg:shrink-0 min-h-0 ${isMobile && activeTab !== 'editor' ? 'hidden' : 'flex'}`}
+        >
           
-          {/* EDITOR UTILITIES BAR */}
-          <div className={`flex px-4 pt-2.5 justify-between items-end border-b select-none shrink-0 ${themeClasses.editorHeader}`}>
+          {/* EDITOR UTILITIES BAR (Desktop only) */}
+          <div className={`hidden sm:flex px-4 pt-2 pb-1.5 justify-end items-center border-b select-none shrink-0 ${themeClasses.editorHeader}`}>
             
-            {/* Document Header Name tag */}
-            <div className={`px-3 py-1 ${themeClasses.editorBg} rounded-t border border-b-0 border-inherit text-[11px] font-bold tracking-wider flex items-center gap-1 shrink-0 max-w-[220px]`}>
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full shrink-0"></span>
-              <input 
-                type="text"
-                value={docName}
-                onChange={(e) => setDocName(e.target.value)}
-                className={`bg-transparent border-none outline-none font-extrabold text-[11px] ${themeClasses.docNameText} ${themeClasses.docNamePlaceholder} focus:ring-0 p-0 m-0 w-28 focus:border-b focus:border-emerald-500/50`}
-                title="Click to rename document"
-                placeholder="Document_Name"
-              />
-              <span className={`font-semibold shrink-0 ${themeClasses.docSuffixText}`}>.hussayni</span>
-            </div>
-            
-            {/* Quick Editor RTL / LTR switch toggles */}
-            <div className="flex items-center gap-1 pb-1.5 text-[10px] font-medium text-slate-500">
-              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mr-1">RTL Direction:</span>
-              <button
-                onClick={() => setPreferences(p => ({ ...p, editorRtl: false }))}
-                className={`px-1.5 py-0.5 text-[9px] font-extrabold rounded cursor-pointer transition-all ${
-                  !preferences.editorRtl 
-                    ? `${themeClasses.accentBg} text-white border-transparent shadow-sm` 
-                    : 'bg-slate-200/50 hover:bg-slate-200 text-slate-600'
-                }`}
-              >
-                LTR
-              </button>
-              <button
-                onClick={() => setPreferences(p => ({ ...p, editorRtl: true }))}
-                className={`px-1.5 py-0.5 text-[9px] font-extrabold rounded cursor-pointer transition-all ${
-                  preferences.editorRtl 
-                    ? `${themeClasses.accentBg} text-white border-transparent shadow-sm` 
-                    : 'bg-slate-200/50 hover:bg-slate-200 text-slate-600'
-                }`}
-              >
-                RTL
-              </button>
+            {/* Quick Editor RTL / LTR switch (Desktop only) */}
+            <div className="hidden sm:flex items-center gap-2 text-[10px] font-medium text-slate-500">
+              <div className="flex items-center gap-0.5">
+                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">RTL Direction:</span>
+                <button
+                  onClick={() => setPreferences(p => ({ ...p, editorRtl: false }))}
+                  className={`px-1.5 py-0.5 text-[9px] font-extrabold rounded cursor-pointer transition-all ${
+                    !preferences.editorRtl 
+                      ? `${themeClasses.accentBg} text-white border-transparent shadow-sm` 
+                      : 'bg-slate-200/50 hover:bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  LTR
+                </button>
+                <button
+                  onClick={() => setPreferences(p => ({ ...p, editorRtl: true }))}
+                  className={`px-1.5 py-0.5 text-[9px] font-extrabold rounded cursor-pointer transition-all ${
+                    preferences.editorRtl 
+                      ? `${themeClasses.accentBg} text-white border-transparent shadow-sm` 
+                      : 'bg-slate-200/50 hover:bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  RTL
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* PAGE FOOTER TEXTS INPUTS */}
-          <div className={`px-4 py-2.5 border-b grid grid-cols-2 gap-3 shrink-0 select-none ${themeClasses.footerInputsBg}`}>
-            <div className="space-y-1">
-              <label className={`block text-[10px] font-bold uppercase tracking-wider text-right ${themeClasses.footerLabelText}`} dir="rtl">
-                الحاشية اليسرى (Left Footer)
-              </label>
-              <input 
-                type="text"
-                value={leftFooterText}
-                onChange={(e) => setLeftFooterText(e.target.value)}
-                placeholder="محرم 1447"
-                className={`w-full text-right border rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none focus:ring-1 transition-all placeholder:text-slate-300 placeholder:font-normal animate-fade-in ${themeClasses.footerInputBox}`}
-                dir="rtl"
-              />
+          {/* PAGE FOOTER TEXTS INPUTS (Desktop only - on Mobile managed via Bottom Sheet) */}
+          <div className={`hidden sm:flex flex-col px-4 py-2 border-b shrink-0 select-none ${themeClasses.footerInputsBg}`}>
+            <div className="flex items-center justify-between mb-1">
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${themeClasses.footerLabelText}`}>
+                Page Footers
+              </span>
             </div>
-            <div className="space-y-1">
-              <label className={`block text-[10px] font-bold uppercase tracking-wider text-right ${themeClasses.footerLabelText}`} dir="rtl">
-                الحاشية اليمنى (Right Footer)
-              </label>
-              <input 
-                type="text"
-                value={rightFooterText}
-                onChange={(e) => setRightFooterText(e.target.value)}
-                placeholder="اسم الشاعر"
-                className={`w-full text-right border rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none focus:ring-1 transition-all placeholder:text-slate-300 placeholder:font-normal animate-fade-in ${themeClasses.footerInputBox}`}
-                dir="rtl"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1 relative">
+                <div className="flex items-center justify-between">
+                  <label className={`block text-[10px] font-bold uppercase tracking-wider ${preferences.editorRtl ? 'text-right' : 'text-left'} ${themeClasses.footerLabelText}`} dir={preferences.editorRtl ? "rtl" : "ltr"}>
+                    Left Footer (Date)
+                  </label>
+                </div>
+                <input 
+                  type="text"
+                  value={leftFooterText}
+                  onChange={(e) => setLeftFooterText(e.target.value)}
+                  placeholder="محرم 1447"
+                  className={`w-full ${preferences.editorRtl ? 'text-right' : 'text-left'} border rounded-lg px-2.5 py-1 text-xs font-semibold outline-none focus:ring-1 transition-all placeholder:text-slate-300 placeholder:font-normal animate-fade-in ${themeClasses.footerInputBox}`}
+                  dir={preferences.editorRtl ? "rtl" : "ltr"}
+                />
+              </div>
+
+              <div className="space-y-1 relative">
+                <div className="flex items-center justify-between">
+                  <label className={`block text-[10px] font-bold uppercase tracking-wider ${preferences.editorRtl ? 'text-right' : 'text-left'} ${themeClasses.footerLabelText}`} dir={preferences.editorRtl ? "rtl" : "ltr"}>
+                    Right Footer (Poet)
+                  </label>
+                </div>
+                <input 
+                  type="text"
+                  value={rightFooterText}
+                  onChange={(e) => setRightFooterText(e.target.value)}
+                  placeholder=""
+                  className={`w-full ${preferences.editorRtl ? 'text-right' : 'text-left'} border rounded-lg px-2.5 py-1 text-xs font-semibold outline-none focus:ring-1 transition-all animate-fade-in ${themeClasses.footerInputBox}`}
+                  dir={preferences.editorRtl ? "rtl" : "ltr"}
+                />
+              </div>
             </div>
           </div>
           
           {/* SCROLLABLE EDITOR CONTAINER */}
-          <div className="flex-1 flex relative overflow-hidden bg-slate-50/20">
+          <div className="flex-1 flex relative overflow-hidden bg-transparent min-h-0">
             {/* Gutter Line Numbers Column */}
             {preferences.showLineNumbers && (
               <div 
                 ref={lineNumbersRef}
-                className={`w-11 text-right pr-2.5 pt-4 select-none overflow-hidden font-mono leading-[21px] text-[11px] ${themeClasses.gutterBg}`}
+                className={`w-11 text-right pr-2.5 pt-2.5 sm:pt-4 pb-28 sm:pb-8 select-none overflow-hidden font-mono leading-[21px] text-[11px] shrink-0 ${themeClasses.gutterBg}`}
               >
                 {lineNumbers.map((num) => (
                   <div key={num} className="h-[21px]">{num}</div>
@@ -1079,74 +1259,108 @@ export default function App() {
               spellCheck={false}
               dir={preferences.editorRtl ? "rtl" : "ltr"}
               wrap="off"
-              className={`flex-1 p-4 bg-transparent resize-none overflow-auto outline-none border-none focus:ring-0 font-mono leading-[21px] whitespace-pre ${themeClasses.editorText}`}
+              className={`flex-1 p-3.5 pt-2.5 sm:p-4 pb-28 sm:pb-8 bg-transparent resize-none overflow-auto outline-none border-none focus:ring-0 font-mono leading-[21px] whitespace-pre min-w-0 ${themeClasses.editorText}`}
               style={{ fontSize: `${preferences.editorFontSize}px` }}
-              placeholder="H = بسم الله الرحمن الرحيم&#10;B = اكتب نص الفقرة هنا...&#10;F = الحاشية السفلية"
+              placeholder={`H\nالمستهل\nB\nالفقرة\nF\nالرباط`}
             />
           </div>
 
           {/* BOTTOM ERROR & VALIDATION LOG DRAWER */}
-          <div className={`${isLogCollapsed ? 'h-9' : 'h-44'} border-t flex flex-col shrink-0 ${themeClasses.validationBodyBg} transition-all duration-150 overflow-hidden`}>
-            <div 
-              onClick={() => setIsLogCollapsed(!isLogCollapsed)}
-              className={`px-4 py-2 text-[9px] font-bold uppercase tracking-wider flex items-center justify-between select-none ${themeClasses.validationHeaderBg} cursor-pointer hover:bg-black/5 dark:hover:bg-white/5`}
-            >
-              <div className="flex items-center gap-1.5">
-                <ChevronDown size={11} className={`transition-transform duration-150 text-slate-400 ${isLogCollapsed ? '' : 'rotate-180'}`} />
-                <span>Hussayni Compilation Log</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                errors.filter(e => e.severity === 'error').length > 0 
-                  ? themeClasses.validationErrorBg 
-                  : `${themeClasses.validationSuccessText} bg-emerald-100/10`
-              }`}>
-                {errors.filter(e => e.severity === 'error').length} Errors
-              </span>
-            </div>
-            
-            {!isLogCollapsed && (
-              <div className="flex-grow p-3.5 overflow-y-auto font-sans">
-                {errors.length === 0 ? (
-                  <div className={`flex items-center gap-2 text-xs py-1 ${themeClasses.validationSuccessText}`}>
-                    <CheckCircle size={13} />
-                    <span>Valid markup syntax! Live layout is successfully typeset.</span>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {errors.map((err, idx) => (
-                      <div 
-                        key={idx} 
-                        className={`flex items-start gap-2 text-xs ${
-                          err.severity === 'error' ? 'text-rose-400' : 'text-amber-400'
-                        }`}
-                      >
-                        <AlertCircle size={13} className="shrink-0 mt-0.5" />
-                        <span className={`px-1.5 rounded text-[9px] font-bold shrink-0 ${
-                          err.severity === 'error' ? themeClasses.validationErrorBg : themeClasses.validationWarningBg
-                        }`}>
-                          Line {err.line}
-                        </span>
-                        <span className="font-medium truncate">{err.message}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* AUTOSAVE FEEDBACK LINE */}
-                <div className={`flex items-center gap-1 text-[10px] mt-3 pt-2 border-t select-none ${themeClasses.autosaveText}`}>
-                  <Info size={11} />
-                  <span>Autosave active. Cached locally: {storageUsage} KB.</span>
+          {preferences.showCompilationLog !== false && (
+            <div className={`${isLogCollapsed ? 'h-9' : 'h-44'} border-t flex flex-col shrink-0 ${themeClasses.validationBodyBg} transition-all duration-150 overflow-hidden`}>
+              <div 
+                onClick={() => setIsLogCollapsed(!isLogCollapsed)}
+                className={`px-4 py-2 text-[9px] font-bold uppercase tracking-wider flex items-center justify-between select-none ${themeClasses.validationHeaderBg} cursor-pointer hover:bg-black/5 dark:hover:bg-white/5`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <ChevronDown size={11} className={`transition-transform duration-150 text-slate-400 ${isLogCollapsed ? '' : 'rotate-180'}`} />
+                  <span>Hussayni Compilation Log</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                    errors.filter(e => e.severity === 'error').length > 0 
+                      ? themeClasses.validationErrorBg 
+                      : `${themeClasses.validationSuccessText} bg-emerald-100/10`
+                  }`}>
+                    {errors.filter(e => e.severity === 'error').length} Errors
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreferences(p => ({ ...p, showCompilationLog: false }));
+                    }}
+                    className="text-slate-400 hover:text-slate-200 p-0.5 rounded cursor-pointer"
+                    title="Hide Log Panel"
+                  >
+                    <X size={12} />
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
+              
+              {!isLogCollapsed && (
+                <div className="flex-grow p-3.5 overflow-y-auto font-sans">
+                  {errors.length === 0 ? (
+                    <div className={`flex items-center gap-2 text-xs py-1 ${themeClasses.validationSuccessText}`}>
+                      <CheckCircle size={13} />
+                      <span>Valid markup syntax! Live layout is successfully typeset.</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {errors.map((err, idx) => (
+                        <div 
+                          key={idx} 
+                          className={`flex items-start gap-2 text-xs ${
+                            err.severity === 'error' ? 'text-rose-400' : 'text-amber-400'
+                          }`}
+                        >
+                          <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                          <span className={`px-1.5 rounded text-[9px] font-bold shrink-0 ${
+                            err.severity === 'error' ? themeClasses.validationErrorBg : themeClasses.validationWarningBg
+                          }`}>
+                            Line {err.line}
+                          </span>
+                          <span className="font-medium truncate">{err.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* AUTOSAVE FEEDBACK LINE */}
+                  <div className={`flex items-center gap-1 text-[10px] mt-3 pt-2 border-t select-none ${themeClasses.autosaveText}`}>
+                    <Info size={11} />
+                    <span>Autosave active. Cached locally: {storageUsage} KB.</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </section>
+
+        {/* DESKTOP RESIZER BAR BETWEEN EDITOR AND PREVIEW */}
+        {!isMobile && (
+          <div
+            onMouseDown={handleMouseDownResizer}
+            className={`hidden lg:flex w-2.5 hover:w-3 bg-slate-800/30 hover:bg-emerald-500/80 active:bg-emerald-500 cursor-col-resize shrink-0 transition-all duration-150 items-center justify-center group select-none z-30 border-r border-slate-700/50 ${
+              isResizing ? 'bg-emerald-500 w-3' : ''
+            }`}
+            title="Drag to adjust editor width (Minimum: 450px)"
+          >
+            <div className="w-0.5 h-10 bg-slate-500 group-hover:bg-white rounded-full transition-colors"></div>
+          </div>
+        )}
 
         {/* RIGHT COMPARTMENT: INTERACTIVE REAL-TIME PAGE TYPESETTER PREVIEW */}
         <section 
           id="preview-section"
-          className={`flex-1 ${themeClasses.workspaceBg} p-4 sm:p-6 flex-col items-center overflow-y-auto relative scroll-smooth print:p-0 print:bg-white print:overflow-visible print:absolute print:inset-0 print:w-full print:h-auto transition-colors duration-200 ${isMobile && activeTab !== 'preview' ? 'hidden' : 'flex'}`}
+          className={`flex-1 ${themeClasses.workspaceBg} p-4 sm:p-6 pb-20 sm:pb-6 flex-col items-center overflow-y-auto relative scroll-smooth print:p-0 print:bg-white print:overflow-visible print:absolute print:inset-0 print:w-full print:h-auto transition-colors duration-200 ${isMobile && activeTab !== 'preview' ? 'hidden' : 'flex'}`}
         >
+          {/* RIGHT SIDE FLOATING BAR FOR PREVIEW SECTION (DESKTOP) */}
+          <DesktopPreviewToolbar 
+            preferences={preferences} 
+            setPreferences={setPreferences} 
+            onOpenExport={() => setShowExportModal(true)} 
+          />
           {preferences.outputMode === 'H' ? (
             <HeaderOnlyRenderer 
               headers={extractedHeaders}
@@ -1178,227 +1392,19 @@ export default function App() {
             />
           )}
 
-          {/* FLOATING ACTION HUD: HEADER MODE (LEFT VERTICAL) VS POEM MODE (BOTTOM RIGHT) */}
-          {preferences.outputMode === 'H' ? (
-            /* Left Sided Vertical Toolbar for Header Preview Mode */
-            <div className="fixed left-2 sm:left-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 print:hidden z-40 select-none">
-              <div className="bg-white/95 backdrop-blur-md p-2 sm:p-2.5 rounded-2xl shadow-2xl border border-slate-200/90 flex flex-col items-center gap-2 text-xs w-[115px] sm:w-[125px]">
-                {/* Text Size Control */}
-                <div className="flex flex-col items-center gap-1 w-full">
-                  <span className="text-[9px] font-extrabold text-slate-400 tracking-wider uppercase">Text Size</span>
-                  <div className="flex items-center justify-between w-full bg-slate-50 p-1 rounded-xl border border-slate-200">
-                    <button
-                      onClick={() => setPreferences(p => ({ ...p, headerFontSize: Math.max(32, (p.headerFontSize || 145) - 5) }))}
-                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer shadow-2xs border border-slate-200 shrink-0"
-                      title="Decrease Text Size (-5px)"
-                    >
-                      <Minus size={12} />
-                    </button>
-                    <span className="text-[11px] font-extrabold text-slate-800 text-center px-0.5 min-w-[32px]">
-                      {preferences.headerFontSize || 145}px
-                    </span>
-                    <button
-                      onClick={() => setPreferences(p => ({ ...p, headerFontSize: Math.min(220, (p.headerFontSize || 145) + 5) }))}
-                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer shadow-2xs border border-slate-200 shrink-0"
-                      title="Increase Text Size (+5px)"
-                    >
-                      <Plus size={12} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="h-px w-full bg-slate-200"></div>
-
-                {/* Line Spacing Control */}
-                <div className="flex flex-col items-center gap-1 w-full">
-                  <span className="text-[9px] font-extrabold text-slate-400 tracking-wider uppercase">Spacing</span>
-                  <div className="flex items-center justify-between w-full bg-slate-50 p-1 rounded-xl border border-slate-200">
-                    <button
-                      onClick={() => setPreferences(p => ({ ...p, headerLineSpacing: Math.max(1.0, parseFloat(((p.headerLineSpacing || 1.2) - 0.1).toFixed(1))) }))}
-                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer shadow-2xs border border-slate-200 shrink-0"
-                      title="Decrease Line Spacing (-0.1)"
-                    >
-                      <Minus size={12} />
-                    </button>
-                    <span className="text-[11px] font-extrabold text-slate-800 text-center px-0.5 min-w-[28px]">
-                      {(preferences.headerLineSpacing || 1.2).toFixed(1)}x
-                    </span>
-                    <button
-                      onClick={() => setPreferences(p => ({ ...p, headerLineSpacing: Math.min(2.5, parseFloat(((p.headerLineSpacing || 1.2) + 0.1).toFixed(1))) }))}
-                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer shadow-2xs border border-slate-200 shrink-0"
-                      title="Increase Line Spacing (+0.1)"
-                    >
-                      <Plus size={12} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="h-px w-full bg-slate-200"></div>
-
-                {/* Theme Mode Control (Dark vs Light) */}
-                <div className="flex flex-col items-center gap-1 w-full">
-                  <span className="text-[9px] font-extrabold text-slate-400 tracking-wider uppercase">Theme</span>
-                  <div className="grid grid-cols-2 gap-1 w-full bg-slate-100 p-1 rounded-xl border border-slate-200 select-none">
-                    <button
-                      onClick={() => setPreferences(p => ({ ...p, headerTheme: 'light' }))}
-                      className={`py-1 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                        preferences.headerTheme === 'light'
-                          ? 'bg-white text-slate-900 shadow-2xs border border-slate-200'
-                          : 'text-slate-500 hover:text-slate-800'
-                      }`}
-                      title="Light Mode"
-                    >
-                      <Sun size={11} />
-                      <span>Light</span>
-                    </button>
-                    <button
-                      onClick={() => setPreferences(p => ({ ...p, headerTheme: 'dark' }))}
-                      className={`py-1 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                        preferences.headerTheme !== 'light'
-                          ? 'bg-slate-900 text-white shadow-2xs'
-                          : 'text-slate-500 hover:text-slate-800'
-                      }`}
-                      title="Dark Mode"
-                    >
-                      <Moon size={11} />
-                      <span>Dark</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="h-px w-full bg-slate-200"></div>
-
-                {/* Zoom Controls */}
-                <div className="flex flex-col items-center gap-1 w-full">
-                  <span className="text-[9px] font-extrabold text-slate-400 tracking-wider uppercase">Zoom</span>
-                  <div className="flex items-center justify-between w-full bg-slate-50 p-1 rounded-xl border border-slate-200">
-                    <button 
-                      onClick={() => setPreferences(p => ({ ...p, zoom: Math.max(50, p.zoom - 10) }))}
-                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer shadow-2xs border border-slate-200 shrink-0"
-                      title="Zoom Out"
-                    >
-                      <ZoomOut size={12} />
-                    </button>
-                    <span className="text-[11px] font-extrabold text-slate-800 text-center px-0.5 min-w-[28px]">
-                      {preferences.zoom}%
-                    </span>
-                    <button 
-                      onClick={() => setPreferences(p => ({ ...p, zoom: Math.min(150, p.zoom + 10) }))}
-                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer shadow-2xs border border-slate-200 shrink-0"
-                      title="Zoom In"
-                    >
-                      <ZoomIn size={12} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="h-px w-full bg-slate-200"></div>
-
-                {/* Quick Slide Image Export Actions */}
-                <div className="flex flex-col gap-1.5 w-full">
-                  <button
-                    onClick={() => exportAllHeaderImages({
-                      headers: extractedHeaders,
-                      fontSize: preferences.headerFontSize || 145,
-                      lineSpacing: preferences.headerLineSpacing || 1.2,
-                      theme: preferences.headerTheme || 'dark',
-                      format: 'png',
-                      docName
-                    })}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white w-full py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 shadow-2xs active:scale-95"
-                    title="Export All Header Slides as PNG"
-                  >
-                    <Download size={11} />
-                    <span>PNG</span>
-                  </button>
-                  <button
-                    onClick={() => exportAllHeaderImages({
-                      headers: extractedHeaders,
-                      fontSize: preferences.headerFontSize || 145,
-                      lineSpacing: preferences.headerLineSpacing || 1.2,
-                      theme: preferences.headerTheme || 'dark',
-                      format: 'jpg',
-                      docName
-                    })}
-                    className="bg-blue-600 hover:bg-blue-500 text-white w-full py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 shadow-2xs active:scale-95"
-                    title="Export All Header Slides as JPG"
-                  >
-                    <Download size={11} />
-                    <span>JPG</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* Full Poem HUD */
-            <div className="fixed bottom-12 right-4 sm:right-8 flex flex-col sm:flex-row items-end sm:items-center gap-2 print:hidden z-40 select-none">
-              {isPaginating && (
-                <div className="bg-slate-900 text-white px-3 py-2 rounded-full shadow-lg flex items-center gap-2 text-[11px] font-medium border border-slate-700">
-                  <Loader2 size={11} className="animate-spin text-emerald-400" />
-                  <span>Compiling Layout...</span>
-                </div>
-              )}
-              {/* Zoom Slider Action panel */}
-              <div className="bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-lg border border-slate-200 flex items-center gap-2.5">
-                <span className="text-[9px] font-extrabold text-slate-400 tracking-wider">ZOOM</span>
-                <button 
-                  onClick={() => setPreferences(p => ({ ...p, zoom: Math.max(50, p.zoom - 10) }))}
-                  className="hover:bg-slate-100 p-1 rounded-full text-slate-600 transition-colors cursor-pointer"
-                >
-                  <ZoomOut size={13} />
-                </button>
-                <span className="text-[11px] font-extrabold text-slate-700 min-w-[28px] text-center">{preferences.zoom}%</span>
-                <button 
-                  onClick={() => setPreferences(p => ({ ...p, zoom: Math.min(150, p.zoom + 10) }))}
-                  className="hover:bg-slate-100 p-1 rounded-full text-slate-600 transition-colors cursor-pointer"
-                >
-                  <ZoomIn size={13} />
-                </button>
-              </div>
-
-              {/* Dynamic Font Range Indicators */}
-              <div className="bg-white/95 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-slate-200 flex items-center gap-2">
-                <span className="text-[9px] font-extrabold text-slate-400 tracking-wider">FONT RANGE</span>
-                <span className="text-xs font-bold text-emerald-600">
-                  {preferences.minFontSize}-{preferences.maxFontSize}pt
-                </span>
-                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
-                <span className="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                  Active: {mainFontSize}pt
-                </span>
-              </div>
+          {/* Compiling spinner toast if paginating */}
+          {isPaginating && (
+            <div className="hidden sm:flex fixed top-16 right-6 z-40 bg-slate-900 text-white px-3 py-1.5 rounded-full shadow-lg items-center gap-2 text-[11px] font-medium border border-slate-700 select-none print:hidden">
+              <Loader2 size={12} className="animate-spin text-emerald-400" />
+              <span>Compiling Layout...</span>
             </div>
           )}
         </section>
       </main>
 
-      {/* MODERN COMPACT STATUS BAR */}
-      <footer className="h-7 bg-slate-100 border-t border-slate-200 px-4 flex items-center justify-between text-[11px] text-slate-500 shrink-0 select-none print:hidden z-20">
-        <div className="flex items-center gap-4">
-          <span>Ln {cursorInfo.line}, Col {cursorInfo.col}</span>
-          <span className="text-emerald-600 flex items-center gap-1 font-semibold">
-            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-            HTML-First Paginator
-          </span>
-          <span className="text-slate-400 hidden sm:inline">Active Theme: {preferences.theme.toUpperCase()}</span>
-        </div>
-        
-        {/* Dynamic bottom action metadata */}
-        <div className="flex items-center gap-4 font-medium text-slate-400">
-          <span>Hussayni {APP_VERSION}</span>
-          <button 
-            onClick={() => setShowAbout(true)}
-            className="hover:text-slate-600 transition-colors cursor-pointer flex items-center gap-1"
-          >
-            <HelpCircle size={11} />
-            <span>About</span>
-          </button>
-        </div>
-      </footer>
-
       {/* SYSTEM TOAST ALERTS */}
       {toastMessage && (
-        <div className="fixed bottom-20 left-6 z-[9999] bg-slate-900/95 text-white px-4 py-2.5 rounded-xl shadow-2xl border border-slate-700 text-xs font-semibold flex items-center gap-2 select-none animate-fade-in">
+        <div className="fixed bottom-[calc(6.25rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 sm:bottom-20 sm:left-6 sm:translate-x-0 z-[9999] bg-slate-900/95 text-white px-4 py-2.5 rounded-xl shadow-2xl border border-slate-700 text-xs font-semibold flex items-center gap-2 select-none animate-fade-in whitespace-nowrap">
           <CheckCircle size={14} className="text-emerald-400" />
           <span>{toastMessage}</span>
         </div>
@@ -1407,12 +1413,12 @@ export default function App() {
       {/* SETTINGS PANEL DRAWERS */}
       {showSettings && (
         <div className="fixed inset-0 z-[100] bg-slate-950/40 backdrop-blur-xs flex justify-end animate-fade-in print:hidden select-none">
-          <div className="w-96 bg-white shadow-2xl h-full flex flex-col animate-slide-left overflow-hidden">
+          <div className="w-full sm:w-[420px] bg-slate-50 shadow-2xl h-full flex flex-col animate-slide-left overflow-hidden">
             {/* Drawer Header */}
-            <div className="bg-[#0f172a] text-white p-5 flex items-center justify-between shrink-0">
+            <div className="bg-[#0f172a] text-white px-5 py-4 flex items-center justify-between shrink-0 shadow-md">
               <div className="flex items-center gap-2">
-                <SettingsIcon size={18} className="text-slate-400" />
-                <h3 className="text-base font-bold tracking-tight">Hussayni settings</h3>
+                <SettingsIcon size={18} className="text-emerald-400" />
+                <h3 className="text-base font-extrabold tracking-tight">Hussayni Settings</h3>
               </div>
               <button 
                 onClick={() => setShowSettings(false)}
@@ -1422,12 +1428,47 @@ export default function App() {
               </button>
             </div>
 
-            {/* Scrollable Panel Items */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-6">
+            {/* Scrollable Panel Items arranged in structured sections */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
               
-              {/* Theme Settings Selector */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Visual Interface Theme</h4>
+              {/* SECTION 1: Application Language */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-2.5">
+                <h4 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Globe size={13} className="text-emerald-500" />
+                  <span>Application Language</span>
+                </h4>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPreferences(p => ({ ...p, language: 'en' }))}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border cursor-pointer transition-all ${
+                      (preferences.language || 'en') === 'en'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-500 shadow-2xs font-extrabold'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>English</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreferences(p => ({ ...p, language: 'ar' }))}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border cursor-pointer transition-all ${
+                      preferences.language === 'ar'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-500 shadow-2xs font-extrabold'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>العربية</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* SECTION 2: Visual Theme */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-2.5">
+                <h4 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sun size={13} className="text-amber-500" />
+                  <span>Visual Theme</span>
+                </h4>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { id: 'slate', name: 'Slate Gray', color: 'bg-slate-700' },
@@ -1440,65 +1481,89 @@ export default function App() {
                       onClick={() => setPreferences(p => ({ ...p, theme: t.id as any }))}
                       className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition-all ${
                         preferences.theme === t.id 
-                          ? 'border-emerald-500 bg-emerald-50/10 text-slate-900' 
-                          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                          ? 'border-emerald-500 bg-emerald-50/20 text-slate-900 font-bold shadow-2xs' 
+                          : 'border-slate-200 text-slate-600 hover:bg-slate-50 font-medium'
                       }`}
                     >
                       <span className={`w-3.5 h-3.5 rounded-full ${t.color} shrink-0`}></span>
-                      <span className="text-xs font-bold">{t.name}</span>
+                      <span className="text-xs">{t.name}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Document Settings */}
-              <div className="space-y-5">
-                <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Document Settings</h4>
+              {/* SECTION 2: Document Typography & Page Layout */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-3">
+                <h4 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Type size={13} className="text-blue-500" />
+                  <span>Document Typography & Page Layout</span>
+                </h4>
 
-                {/* Subtitle: Font size */}
-                <div className="space-y-3 pl-1">
-                  <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Font size</h5>
-                  
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs font-semibold text-slate-700">
-                      <span>Minimum Page Font Size ({preferences.minFontSize}pt)</span>
-                    </div>
-                    <input 
-                      type="range"
-                      min="12"
-                      max="24"
-                      value={preferences.minFontSize}
-                      onChange={(e) => setPreferences(p => ({ ...p, minFontSize: parseInt(e.target.value) }))}
-                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                    />
+                {/* Min Page Font Size */}
+                <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-800">Minimum Font Size</span>
+                    <span className="text-[10px] text-slate-400">Page text lower bound</span>
                   </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs font-semibold text-slate-700">
-                      <span>Maximum Page Font Size ({preferences.maxFontSize}pt)</span>
-                    </div>
-                    <input 
-                      type="range"
-                      min="24"
-                      max="40"
-                      value={preferences.maxFontSize}
-                      onChange={(e) => setPreferences(p => ({ ...p, maxFontSize: parseInt(e.target.value) }))}
-                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                    />
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, minFontSize: Math.max(12, p.minFontSize - 1) }))}
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
+                    >
+                      <Minus size={13} />
+                    </button>
+                    <span className="text-xs font-extrabold text-slate-800 text-center px-1 min-w-[42px]">
+                      {preferences.minFontSize}pt
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, minFontSize: Math.min(24, p.minFontSize + 1) }))}
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
+                    >
+                      <Plus size={13} />
+                    </button>
                   </div>
                 </div>
 
-                {/* Subtitle: Document paragraph spacing */}
-                <div className="space-y-2 pl-1 pt-1">
-                  <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Document paragraph spacing</h5>
+                {/* Max Page Font Size */}
+                <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-800">Maximum Font Size</span>
+                    <span className="text-[10px] text-slate-400">Page text upper bound</span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, maxFontSize: Math.max(24, p.maxFontSize - 1) }))}
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
+                    >
+                      <Minus size={13} />
+                    </button>
+                    <span className="text-xs font-extrabold text-slate-800 text-center px-1 min-w-[42px]">
+                      {preferences.maxFontSize}pt
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, maxFontSize: Math.min(40, p.maxFontSize + 1) }))}
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
+                    >
+                      <Plus size={13} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Paragraph Spacing */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-xs font-bold text-slate-800 block">Paragraph Spacing</span>
                   <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl">
                     {['compact', 'normal', 'relaxed'].map((sp) => (
                       <button
                         key={sp}
                         onClick={() => setPreferences(p => ({ ...p, paragraphSpacing: sp as any }))}
-                        className={`py-1.5 rounded-lg text-xs font-bold uppercase transition-all cursor-pointer ${
+                        className={`py-1.5 rounded-lg text-xs font-extrabold uppercase transition-all cursor-pointer ${
                           preferences.paragraphSpacing === sp 
-                            ? 'bg-white text-slate-900 shadow-sm' 
+                            ? 'bg-white text-emerald-700 shadow-2xs border border-slate-200/80' 
                             : 'text-slate-500 hover:text-slate-800'
                         }`}
                       >
@@ -1507,147 +1572,256 @@ export default function App() {
                     ))}
                   </div>
                 </div>
+              </div>
 
-                {/* Subtitle: Footer settings */}
-                <div className="space-y-3 pl-1 pt-1">
-                  <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Footer settings</h5>
-                  
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <span className="text-xs font-semibold text-slate-700">Display Page Numbers</span>
-                    <input 
-                      type="checkbox"
-                      checked={preferences.showPageNumber !== false}
-                      onChange={(e) => setPreferences(p => ({ ...p, showPageNumber: e.target.checked }))}
-                      className="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
-                    />
+              {/* SECTION 3: Header Only Mode Settings */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-3">
+                <h4 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Image size={13} className="text-purple-500" />
+                  <span>Header Slide Mode (1920×1080)</span>
+                </h4>
+
+                {/* Header Text Size */}
+                <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-800">Header Text Size</span>
+                    <span className="text-[10px] text-slate-400">Title font scale</span>
                   </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs font-semibold text-slate-700">
-                      <span>Footer Font Size ({preferences.footerFontSize || 14}px)</span>
-                    </div>
-                    <input 
-                      type="range"
-                      min="10"
-                      max="20"
-                      value={preferences.footerFontSize || 14}
-                      onChange={(e) => setPreferences(p => ({ ...p, footerFontSize: parseInt(e.target.value) }))}
-                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                    />
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, headerFontSize: Math.max(32, (p.headerFontSize || 145) - 5) }))}
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
+                    >
+                      <Minus size={13} />
+                    </button>
+                    <span className="text-xs font-extrabold text-slate-800 text-center px-1 min-w-[48px]">
+                      {preferences.headerFontSize || 145}px
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, headerFontSize: Math.min(220, (p.headerFontSize || 145) + 5) }))}
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
+                    >
+                      <Plus size={13} />
+                    </button>
                   </div>
                 </div>
 
-                {/* Subtitle: Header Only Settings */}
-                <div className="space-y-3 pl-1 pt-1 border-t border-slate-100">
-                  <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Header Only (1920×1080) Settings</h5>
-                  
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs font-semibold text-slate-700">
-                      <span>Header Text Size ({preferences.headerFontSize || 145}px)</span>
-                    </div>
-                    <input 
-                      type="range"
-                      min="32"
-                      max="220"
-                      value={preferences.headerFontSize || 145}
-                      onChange={(e) => setPreferences(p => ({ ...p, headerFontSize: parseInt(e.target.value) }))}
-                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                    />
+                {/* Header Line Spacing */}
+                <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-800">Header Line Spacing</span>
+                    <span className="text-[10px] text-slate-400">Line gap multiplier</span>
                   </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs font-semibold text-slate-700">
-                      <span>Header Line Spacing ({preferences.headerLineSpacing || 1.2}x)</span>
-                    </div>
-                    <input 
-                      type="range"
-                      min="1.0"
-                      max="2.5"
-                      step="0.1"
-                      value={preferences.headerLineSpacing || 1.2}
-                      onChange={(e) => setPreferences(p => ({ ...p, headerLineSpacing: parseFloat(e.target.value) }))}
-                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                    />
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, headerLineSpacing: Math.max(1.0, parseFloat(((p.headerLineSpacing || 1.2) - 0.1).toFixed(1))) }))}
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
+                    >
+                      <Minus size={13} />
+                    </button>
+                    <span className="text-xs font-extrabold text-slate-800 text-center px-1 min-w-[42px]">
+                      {preferences.headerLineSpacing || 1.2}x
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, headerLineSpacing: Math.min(2.5, parseFloat(((p.headerLineSpacing || 1.2) + 0.1).toFixed(1))) }))}
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
+                    >
+                      <Plus size={13} />
+                    </button>
                   </div>
+                </div>
 
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-semibold text-slate-700">
-                      <span>Header Theme</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        onClick={() => setPreferences(p => ({ ...p, headerTheme: 'light' }))}
-                        className={`py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
-                          preferences.headerTheme === 'light'
-                            ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        <Sun size={13} />
-                        <span>Light (White)</span>
-                      </button>
-                      <button
-                        onClick={() => setPreferences(p => ({ ...p, headerTheme: 'dark' }))}
-                        className={`py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
-                          preferences.headerTheme !== 'light'
-                            ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        <Moon size={13} />
-                        <span>Dark (Black)</span>
-                      </button>
-                    </div>
+                {/* Header Theme */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-xs font-bold text-slate-800 block">Header Canvas Background</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setPreferences(p => ({ ...p, headerTheme: 'light' }))}
+                      className={`py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
+                        preferences.headerTheme === 'light'
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Sun size={13} />
+                      <span>Light Canvas</span>
+                    </button>
+                    <button
+                      onClick={() => setPreferences(p => ({ ...p, headerTheme: 'dark' }))}
+                      className={`py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
+                        preferences.headerTheme !== 'light'
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Moon size={13} />
+                      <span>Dark Canvas</span>
+                    </button>
                   </div>
                 </div>
               </div>
 
-              {/* Editor panel customizations */}
-              <div className="space-y-3 pt-4 border-t border-slate-100">
-                <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Editor Settings</h4>
+              {/* SECTION 4: Page Footers & Numbers */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-3">
+                <h4 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText size={13} className="text-emerald-500" />
+                  <span>Page Footers & Numbers</span>
+                </h4>
+
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <span className="text-xs font-bold text-slate-800">Display Page Numbers</span>
+                  <input 
+                    type="checkbox"
+                    checked={preferences.showPageNumber !== false}
+                    onChange={(e) => setPreferences(p => ({ ...p, showPageNumber: e.target.checked }))}
+                    className="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                  />
+                </div>
+
+                {/* Footer Font Size */}
+                <div className="flex items-center justify-between py-1">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-800">Footer Font Size</span>
+                    <span className="text-[10px] text-slate-400">Footer text size</span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, footerFontSize: Math.max(10, (p.footerFontSize || 14) - 1) }))}
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
+                    >
+                      <Minus size={13} />
+                    </button>
+                    <span className="text-xs font-extrabold text-slate-800 text-center px-1 min-w-[42px]">
+                      {preferences.footerFontSize || 14}px
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, footerFontSize: Math.min(20, (p.footerFontSize || 14) + 1) }))}
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
+                    >
+                      <Plus size={13} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 5: Code Editor Preferences */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-3">
+                <h4 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <BookOpen size={13} className="text-amber-500" />
+                  <span>Code Editor Preferences</span>
+                </h4>
                 
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <span className="text-xs font-semibold text-slate-700">Display Gutter Line Numbers</span>
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-800">Display Gutter Line Numbers</span>
+                    <span className="text-[10px] text-slate-400">Left line number bar</span>
+                  </div>
                   <input 
                     type="checkbox"
                     checked={preferences.showLineNumbers}
                     onChange={(e) => setPreferences(p => ({ ...p, showLineNumbers: e.target.checked }))}
-                    className="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500"
+                    className="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
                   />
                 </div>
 
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <span className="text-xs font-semibold text-slate-700">Show Layout Validation Overlay</span>
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-800">Display Compilation Log</span>
+                    <span className="text-[10px] text-slate-400">Bottom error & syntax logger</span>
+                  </div>
+                  <input 
+                    type="checkbox"
+                    checked={preferences.showCompilationLog !== false}
+                    onChange={(e) => setPreferences(p => ({ ...p, showCompilationLog: e.target.checked }))}
+                    className="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-800">Layout Validation Overlay</span>
+                    <span className="text-[10px] text-slate-400">Debug boxes & metrics</span>
+                  </div>
                   <input 
                     type="checkbox"
                     checked={preferences.showDebug}
                     onChange={(e) => setPreferences(p => ({ ...p, showDebug: e.target.checked }))}
-                    className="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500"
+                    className="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs font-semibold text-slate-700">
-                    <span>Editor Typing Font Size ({preferences.editorFontSize}px)</span>
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-800">Editor Direction</span>
+                    <span className="text-[10px] text-slate-400">RTL vs LTR typing alignment</span>
                   </div>
-                  <input 
-                    type="range"
-                    min="11"
-                    max="20"
-                    value={preferences.editorFontSize}
-                    onChange={(e) => setPreferences(p => ({ ...p, editorFontSize: parseInt(e.target.value) }))}
-                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                  />
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, editorRtl: false }))}
+                      className={`h-8 px-3 rounded-lg text-xs font-extrabold uppercase transition-all cursor-pointer ${
+                        !preferences.editorRtl 
+                          ? 'bg-white text-emerald-700 shadow-2xs border border-slate-200/80' 
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      LTR
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, editorRtl: true }))}
+                      className={`h-8 px-3 rounded-lg text-xs font-extrabold uppercase transition-all cursor-pointer ${
+                        preferences.editorRtl 
+                          ? 'bg-white text-emerald-700 shadow-2xs border border-slate-200/80' 
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      RTL
+                    </button>
+                  </div>
+                </div>
+
+                {/* Editor Typing Font Size */}
+                <div className="flex items-center justify-between py-1">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-800">Editor Typing Font Size</span>
+                    <span className="text-[10px] text-slate-400">Monospace editor size</span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, editorFontSize: Math.max(11, p.editorFontSize - 1) }))}
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
+                    >
+                      <Minus size={13} />
+                    </button>
+                    <span className="text-xs font-extrabold text-slate-800 text-center px-1 min-w-[42px]">
+                      {preferences.editorFontSize}px
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, editorFontSize: Math.min(20, p.editorFontSize + 1) }))}
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
+                    >
+                      <Plus size={13} />
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* How to Use Guide */}
-              <div className="space-y-2.5 pt-4 border-t border-slate-100">
+              {/* SECTION 6: How to Use Guide & Backups */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-3">
                 <button
                   onClick={() => setShowHowToUse(!showHowToUse)}
                   className="w-full flex items-center justify-between text-left group cursor-pointer"
                 >
-                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-400 uppercase tracking-wider group-hover:text-emerald-600 transition-colors">
+                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-700 uppercase tracking-wider group-hover:text-emerald-600 transition-colors">
                     <BookOpen size={13} className="text-slate-400 group-hover:text-emerald-500 transition-colors" />
                     <span>How to Use Guide</span>
                   </div>
@@ -1658,7 +1832,7 @@ export default function App() {
                 </button>
 
                 {showHowToUse && (
-                  <div className="bg-slate-50 p-3.5 rounded-xl text-xs text-slate-600 leading-relaxed border border-slate-100/80 space-y-2.5 animate-fade-in select-text">
+                  <div className="bg-slate-50 p-3.5 rounded-xl text-xs text-slate-600 leading-relaxed border border-slate-100 space-y-2.5 animate-fade-in select-text">
                     <p className="font-bold text-slate-800">
                       Welcome to Hussayni Typesetter System
                     </p>
@@ -1669,97 +1843,115 @@ export default function App() {
                       <p className="font-extrabold text-[10px] text-slate-500 uppercase tracking-wide">Essential Markups</p>
                       <ul className="space-y-1.5 pl-0.5">
                         <li className="flex items-start gap-1.5">
-                          <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono text-[10px] shrink-0 font-bold">H =</code>
+                          <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-extrabold text-[10px] shrink-0">H =</code>
                           <span className="text-[11px] text-slate-500">Main Header/Title block. Renders bold centered display text.</span>
                         </li>
                         <li className="flex items-start gap-1.5">
-                          <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono text-[10px] shrink-0 font-bold">B =</code>
+                          <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-extrabold text-[10px] shrink-0">B =</code>
                           <span className="text-[11px] text-slate-500">Body text block. Renders RTL Arabic paragraphs/verses.</span>
                         </li>
                         <li className="flex items-start gap-1.5">
-                          <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono text-[10px] shrink-0 font-bold">F =</code>
+                          <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-extrabold text-[10px] shrink-0">F =</code>
                           <span className="text-[11px] text-slate-500">Subtitle/Commentary/Footnotes. Hidden in document exports.</span>
                         </li>
                         <li className="flex items-start gap-1.5">
-                          <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono text-[10px] shrink-0 font-bold">P</code>
+                          <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-extrabold text-[10px] shrink-0">P</code>
                           <span className="text-[11px] text-slate-500">Standalone line. Forces an immediate layout page break.</span>
                         </li>
                       </ul>
                     </div>
-                    <p className="text-[11px] text-slate-500">
-                      Adjust font sizes and margins in <strong className="text-slate-700">Document Settings</strong> to resolve horizontal overflows instantly.
-                    </p>
                   </div>
                 )}
+
+                <div className="pt-2 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>Used Storage Budget:</span>
+                    <span className="font-bold text-slate-700">{storageUsage} KB</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={handleExportPreferences}
+                      className="border border-slate-200 hover:bg-slate-50 text-slate-700 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Download size={13} />
+                      <span>Export Backup</span>
+                    </button>
+                    <button
+                      onClick={handleImportPreferencesClick}
+                      className="border border-slate-200 hover:bg-slate-50 text-slate-700 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Upload size={13} />
+                      <span>Import Backup</span>
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={handleClearAllData}
+                    className="w-full border border-rose-200 hover:bg-rose-50 text-rose-700 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Trash2 size={13} />
+                    <span>Factory Hard Reset (Wipe Cache)</span>
+                  </button>
+                </div>
               </div>
 
-              {/* STORAGE AND SETTINGS PREFERENCES ACTIONS */}
-              <div className="space-y-2.5 pt-4 border-t border-slate-100">
-                <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Local Storage Backup Profiles</h4>
+              {/* SECTION 7: App Status & Updates (Bottom Section) */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-2.5 select-none text-[11px] text-slate-500">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <p className="font-extrabold text-xs text-slate-800">APP STATUS & UPDATES</p>
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                    pwa.needRefresh ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  }`}>
+                    {pwa.needRefresh ? 'Update Pending' : 'Up to Date'}
+                  </span>
+                </div>
                 
-                <div className="flex items-center justify-between text-xs text-slate-500 pb-1">
-                  <span>Used Storage Budget:</span>
-                  <span className="font-bold text-slate-700">{storageUsage} KB</span>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>App Engine:</span>
+                    <span className="font-bold text-slate-800">v{APP_VERSION}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Installation State:</span>
+                    <span className="font-bold text-slate-800">
+                      {pwa.isInstalled ? 'Installed Native PWA' : 'Web Browser View'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Offline Worker:</span>
+                    <span className="font-bold text-slate-800">
+                      {pwa.offlineReady ? 'Active Cache Ready' : 'Online Sync'}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                {/* Show Update button ONLY when an update is available */}
+                {pwa.needRefresh && (
                   <button
-                    onClick={handleExportPreferences}
-                    className="border border-slate-200 hover:bg-slate-50 text-slate-700 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-                    title="Export all preferences, cache drafts, and window states to file"
+                    onClick={() => pwa.updateServiceWorker(true)}
+                    className="w-full mt-2 bg-amber-500 hover:bg-amber-400 text-slate-900 text-xs font-black py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-md animate-bounce"
                   >
-                    <Download size={13} />
-                    <span>Export Backup</span>
+                    <Sparkles size={14} />
+                    <span>Update Available – Click to Reload</span>
                   </button>
-                  <button
-                    onClick={handleImportPreferencesClick}
-                    className="border border-slate-200 hover:bg-slate-50 text-slate-700 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-                    title="Import backup files to restore active work states"
-                  >
-                    <Upload size={13} />
-                    <span>Import Backup</span>
-                  </button>
-                </div>
+                )}
 
-                {/* Hard reset action */}
-                <button
-                  onClick={handleClearAllData}
-                  className="w-full mt-2 border border-rose-200 hover:bg-rose-50 text-rose-700 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Trash2 size={13} />
-                  <span>Factory Hard Reset (Wipe Cache)</span>
-                </button>
-              </div>
-
-              {/* Dynamic PWA Status Badge */}
-              <div className="bg-slate-50 p-4 rounded-xl space-y-1.5 select-none text-[11px] text-slate-500 border border-slate-100">
-                <p className="font-bold text-slate-700">PWA STATUS MANAGER</p>
-                <div className="flex justify-between">
-                  <span>Installation state:</span>
-                  <span className="font-bold text-slate-700">
-                    {pwa.isInstalled ? 'Installed Native App' : 'Web-Standard Browser View'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Offline Service Worker:</span>
-                  <span className="font-bold text-slate-700">
-                    {pwa.offlineReady ? 'Active Cache Ready' : 'Running Sync Mode'}
-                  </span>
-                </div>
                 {pwa.isInstallable && (
                   <button
                     onClick={pwa.installApp}
-                    className="w-full mt-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 rounded-lg transition-colors cursor-pointer"
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                   >
-                    Install Hussayni PWA App
+                    <Download size={13} />
+                    <span>Install Hussayni PWA App</span>
                   </button>
                 )}
               </div>
+
             </div>
 
             {/* Drawer Footer info */}
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-[10px] text-slate-400">
-              <span>Hussayni typesetter engine v1.5.0</span>
+            <div className="p-4 border-t border-slate-200/80 bg-white flex items-center justify-end text-[10px] text-slate-400 shrink-0">
               <button 
                 onClick={() => { setShowSettings(false); setShowAbout(true); }}
                 className="text-emerald-600 font-bold hover:underline cursor-pointer"
@@ -1779,10 +1971,10 @@ export default function App() {
             <div className="bg-slate-900 text-white p-5 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-                  <Printer size={18} />
+                  <Download size={18} />
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold tracking-tight">Compile &amp; Export Document</h3>
+                  <h3 className="text-base font-extrabold tracking-tight">Export</h3>
                 </div>
               </div>
               <button 
@@ -1820,21 +2012,21 @@ export default function App() {
 
               {/* Option A: PDF Vector layout (Hidden in Header Mode) */}
               {preferences.outputMode !== 'H' && (
-                <div className="border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/5 p-4 rounded-xl transition-all duration-150 flex items-start gap-3.5">
+                <div className="border-2 border-rose-300 hover:border-rose-500 bg-rose-50/20 p-4 rounded-xl transition-all duration-150 flex items-start gap-3.5 shadow-2xs">
                   <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0 select-none">
                     <Printer size={18} />
                   </div>
                   <div className="flex-grow">
-                    <h4 className="font-extrabold text-sm text-slate-900">High-Fidelity PDF Document</h4>
+                    <h4 className="font-extrabold text-sm text-slate-900">PDF Document</h4>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      Generate vector-perfect printable A4 PDF documents with custom margins.
+                      Please set correct print settings
                     </p>
                     <button
                       onClick={handleLaunchPrint}
-                      className="mt-3 bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1 shadow-sm cursor-pointer"
+                      className="mt-3 bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
                     >
                       <Printer size={12} />
-                      <span>Launch PDF Print Settings</span>
+                      <span>PDF Print</span>
                     </button>
                   </div>
                 </div>
@@ -1842,38 +2034,40 @@ export default function App() {
 
               {/* Option B: Microsoft Word Document (.docx) (Hidden in Header Mode) */}
               {preferences.outputMode !== 'H' && (
-                <div className="border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/5 p-4 rounded-xl transition-all duration-150 flex items-start gap-3.5">
+                <div className="border-2 border-blue-300 hover:border-blue-500 bg-blue-50/20 p-4 rounded-xl transition-all duration-150 flex items-start gap-3.5 shadow-2xs">
                   <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0 select-none">
                     <FileText size={18} />
                   </div>
                   <div className="flex-grow">
-                    <h4 className="font-extrabold text-sm text-slate-900">Microsoft Word Document (.docx)</h4>
+                    <h4 className="font-extrabold text-sm text-slate-900">Microsoft Word Document</h4>
                     <button
                       onClick={handleLaunchDocx}
                       disabled={isGeneratingDocx}
-                      className="mt-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1 shadow-sm cursor-pointer"
+                      className="mt-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1.5 shadow-sm cursor-pointer max-w-full truncate"
                     >
                       {isGeneratingDocx ? (
-                        <Loader2 size={12} className="animate-spin" />
+                        <Loader2 size={12} className="animate-spin shrink-0" />
                       ) : (
-                        <Download size={12} />
+                        <Download size={12} className="shrink-0" />
                       )}
-                      <span>{isGeneratingDocx ? "Compiling XML..." : "Compile & Download .docx"}</span>
+                      <span className="truncate">
+                        {isGeneratingDocx ? "Compiling XML..." : (docName ? (docName.toLowerCase().endsWith('.docx') ? docName : `${docName}.docx`) : 'document.docx')}
+                      </span>
                     </button>
                   </div>
                 </div>
               )}
 
               {/* Option C: Header Only Slide Images (PNG / JPG) */}
-              <div className="border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/5 p-4 rounded-xl transition-all duration-150 flex items-start gap-3.5">
+              <div className="border-2 border-emerald-300 hover:border-emerald-500 bg-emerald-50/20 p-4 rounded-xl transition-all duration-150 flex items-start gap-3.5 shadow-2xs">
                 <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0 select-none">
                   <Image size={18} />
                 </div>
                 <div className="flex-grow">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-extrabold text-sm text-slate-900">Header Only Slide Images</h4>
+                    <h4 className="font-extrabold text-sm text-slate-900">Header Only</h4>
                     <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      1920 × 1080 16:9
+                      1920 × 1080
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2.5">
@@ -1892,7 +2086,7 @@ export default function App() {
                       className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                     >
                       <Download size={13} />
-                      <span>PNG {extractedHeaders.length > 1 ? `Package (.zip)` : `Slide`}</span>
+                      <span>PNG{extractedHeaders.length > 1 ? '(s)' : ''}</span>
                     </button>
 
                     <button
@@ -1910,7 +2104,7 @@ export default function App() {
                       className="bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                     >
                       <Download size={13} />
-                      <span>JPG {extractedHeaders.length > 1 ? `Package (.zip)` : `Slide`}</span>
+                      <span>JPG{extractedHeaders.length > 1 ? '(s)' : ''}</span>
                     </button>
                   </div>
                 </div>
@@ -2089,6 +2283,38 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* MOBILE BOTTOM EDITING TOOLBAR */}
+      {isMobile && activeTab === 'editor' && (
+        <MobileBottomToolbar
+          onInsertTag={handleInsertTag}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onClear={handleClearText}
+          onOpenMore={() => setShowMobileFooterSheet(true)}
+        />
+      )}
+
+      {/* MOBILE BOTTOM PREVIEW TOOLBAR */}
+      {isMobile && activeTab === 'preview' && (
+        <MobilePreviewToolbar
+          preferences={preferences}
+          setPreferences={setPreferences}
+          onPopupStateChange={setIsPreviewPopupOpen}
+        />
+      )}
+
+      {/* MOBILE FOOTER & SETTINGS BOTTOM SHEET DRAWER */}
+      <MobileFooterSheet
+        isOpen={showMobileFooterSheet}
+        onClose={() => setShowMobileFooterSheet(false)}
+        leftFooterText={leftFooterText}
+        setLeftFooterText={setLeftFooterText}
+        rightFooterText={rightFooterText}
+        setRightFooterText={setRightFooterText}
+        preferences={preferences}
+        setPreferences={setPreferences}
+      />
 
     </div>
   );
