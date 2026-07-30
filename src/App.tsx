@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Plus, 
   Minus,
@@ -54,8 +55,9 @@ import {
 } from './utils/documentModel';
 import { MobileFooterSheet } from './components/MobileFooterSheet';
 import { MobileBottomToolbar } from './components/MobileBottomToolbar';
-import { MobilePreviewToolbar } from './components/MobilePreviewToolbar';
+import { MobilePreviewToolbar, ActivePopup } from './components/MobilePreviewToolbar';
 import { DesktopPreviewToolbar } from './components/DesktopPreviewToolbar';
+import { DesktopEditorToolbar } from './components/DesktopEditorToolbar';
 
 // Injected globals from Vite define, with safe development fallbacks
 const APP_VERSION = '2.0.0';
@@ -130,8 +132,9 @@ export default function App() {
     return isMobileViewport ? { ...DEFAULT_PREFERENCES, showLineNumbers: false, zoom: 50 } : DEFAULT_PREFERENCES;
   });
 
-  // Mobile Preview Popup state
-  const [isPreviewPopupOpen, setIsPreviewPopupOpen] = useState<boolean>(false);
+  // Mobile Preview Active Popup type
+  const [activePreviewPopup, setActivePreviewPopup] = useState<ActivePopup>('none');
+  const isPreviewPopupOpen = activePreviewPopup !== 'none';
 
   // Desktop Editor Resizable Width (Minimum 450px)
   const [editorWidth, setEditorWidth] = useState<number>(450);
@@ -185,6 +188,8 @@ export default function App() {
   const [isPaginating, setIsPaginating] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
   const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [vvHeight, setVvHeight] = useState<number | null>(null);
+  const [isEditorFocused, setIsEditorFocused] = useState<boolean>(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -194,6 +199,30 @@ export default function App() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setVvHeight(null);
+      return;
+    }
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const handleVvChange = () => {
+      setVvHeight(vv.height);
+    };
+
+    vv.addEventListener('resize', handleVvChange);
+    vv.addEventListener('scroll', handleVvChange);
+    handleVvChange();
+
+    return () => {
+      vv.removeEventListener('resize', handleVvChange);
+      vv.removeEventListener('scroll', handleVvChange);
+    };
+  }, [isMobile]);
+
+  const isKeyboardActive = isMobile && (isEditorFocused || (vvHeight !== null && (window.innerHeight - vvHeight > 100)));
 
   // Interactive Overlays
   const [showSettings, setShowSettings] = useState<boolean>(false);
@@ -807,7 +836,11 @@ export default function App() {
   const lineNumbers = Array.from({ length: linesCount }, (_, i) => i + 1);
 
   return (
-    <div id="app-container" className={`flex flex-col h-screen h-[100dvh] ${themeClasses.appBg} font-sans overflow-hidden transition-colors duration-200`}>
+    <div 
+      id="app-container" 
+      className={`relative flex flex-col h-screen h-[100dvh] ${themeClasses.appBg} font-sans overflow-hidden transition-colors duration-200`}
+      style={{ height: isMobile && vvHeight ? `${vvHeight}px` : undefined }}
+    >
       
       {/* Dynamic Hidden File Inputs */}
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".txt" className="hidden" />
@@ -881,13 +914,14 @@ export default function App() {
                   type="text"
                   value={docName}
                   onChange={(e) => setDocName(e.target.value)}
-                  className="bg-transparent text-white font-extrabold text-xs sm:text-sm outline-none w-20 sm:w-32 focus:border-b focus:border-emerald-400 p-0 m-0 truncate"
+                  style={{ width: `${Math.max(8, (docName || '').length + 1)}ch` }}
+                  className="bg-transparent text-white font-extrabold text-xs sm:text-sm outline-none max-w-[45vw] sm:max-w-[240px] md:max-w-[360px] lg:max-w-[500px] focus:border-b focus:border-emerald-400 p-0 m-0 truncate"
                   title="Click to rename document"
                   placeholder="Poem_Name"
                 />
 
                 {/* Save Status Badge */}
-                <div className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900/90 border border-slate-700/80 shrink-0 select-none">
+                <div className="hidden sm:flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900/90 border border-slate-700/80 shrink-0 select-none">
                   {saveStatus === 'saving' && (
                     <span className="text-amber-400 flex items-center gap-1">
                       <Loader2 size={10} className="animate-spin" />
@@ -1119,39 +1153,83 @@ export default function App() {
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative min-h-0">
         
         {/* OPTION 4: FLOATING OVERLAY SWITCHER FOR MOBILE (Bottom Center) */}
-        {isMobile && !isPreviewPopupOpen && (
-          <div className="fixed bottom-[calc(3.25rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-50 bg-slate-900 p-1 rounded-full border border-slate-700/80 flex items-center shadow-2xl select-none print:hidden">
-            <button
-              type="button"
-              onClick={() => setActiveTab('editor')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'editor'
-                  ? 'bg-emerald-500 text-slate-950 font-black shadow-sm'
-                  : 'text-slate-300 hover:text-white'
-              }`}
+        <AnimatePresence>
+          {isMobile && !isPreviewPopupOpen && (
+            <motion.div
+              key="mobile-tab-switcher"
+              initial={{ 
+                opacity: 0, 
+                y: 15, 
+                x: '-50%', 
+                scale: 0.9,
+                bottom: isKeyboardActive 
+                  ? '3.25rem' 
+                  : 'calc(3.25rem + env(safe-area-inset-bottom))'
+              }}
+              animate={{ 
+                opacity: 1, 
+                y: 0, 
+                x: '-50%', 
+                scale: 1,
+                bottom: isKeyboardActive 
+                  ? '3.25rem' 
+                  : 'calc(3.25rem + env(safe-area-inset-bottom))'
+              }}
+              exit={{ 
+                opacity: 0, 
+                y: 12, 
+                scale: 0.92,
+                transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } 
+              }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="absolute left-1/2 z-[45] bg-slate-900 p-1 rounded-full border border-slate-700/80 flex items-center shadow-2xl select-none print:hidden"
             >
-              <FileText size={13} />
-              <span>Editor</span>
-              {errors.filter(e => e.severity === 'error').length > 0 && (
-                <span className="bg-rose-500 text-white text-[8px] font-black px-1 rounded-full min-w-[14px] text-center">
-                  {errors.filter(e => e.severity === 'error').length}
+              <button
+                type="button"
+                onClick={() => setActiveTab('editor')}
+                className="relative px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer overflow-hidden"
+              >
+                {activeTab === 'editor' && (
+                  <motion.div
+                    layoutId="activeTabBg"
+                    className="absolute inset-0 bg-emerald-500 z-0 rounded-full"
+                    transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                  />
+                )}
+                <span className={`relative z-10 flex items-center gap-1.5 transition-colors duration-150 ${
+                  activeTab === 'editor' ? 'text-slate-950 font-black' : 'text-slate-300 hover:text-white'
+                }`}>
+                  <FileText size={13} />
+                  <span>Editor</span>
+                  {errors.filter(e => e.severity === 'error').length > 0 && (
+                    <span className="bg-rose-500 text-white text-[8px] font-black px-1 rounded-full min-w-[14px] text-center">
+                      {errors.filter(e => e.severity === 'error').length}
+                    </span>
+                  )}
                 </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('preview')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'preview'
-                  ? 'bg-emerald-500 text-slate-950 font-black shadow-sm'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              <BookOpen size={13} />
-              <span>Preview</span>
-            </button>
-          </div>
-        )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('preview')}
+                className="relative px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer overflow-hidden"
+              >
+                {activeTab === 'preview' && (
+                  <motion.div
+                    layoutId="activeTabBg"
+                    className="absolute inset-0 bg-emerald-500 z-0 rounded-full"
+                    transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                  />
+                )}
+                <span className={`relative z-10 flex items-center gap-1.5 transition-colors duration-150 ${
+                  activeTab === 'preview' ? 'text-slate-950 font-black' : 'text-slate-300 hover:text-white'
+                }`}>
+                  <BookOpen size={13} />
+                  <span>Preview</span>
+                </span>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       
         {/* LEFT COMPARTMENT: MARKUP TEXT EDITOR */}
         <section 
@@ -1159,78 +1237,16 @@ export default function App() {
           className={`flex-1 h-full w-full lg:flex-none flex-col border-r border-slate-200 ${themeClasses.editorBg} print:hidden lg:shrink-0 min-h-0 ${isMobile && activeTab !== 'editor' ? 'hidden' : 'flex'}`}
         >
           
-          {/* EDITOR UTILITIES BAR (Desktop only) */}
-          <div className={`hidden sm:flex px-4 pt-2 pb-1.5 justify-end items-center border-b select-none shrink-0 ${themeClasses.editorHeader}`}>
-            
-            {/* Quick Editor RTL / LTR switch (Desktop only) */}
-            <div className="hidden sm:flex items-center gap-2 text-[10px] font-medium text-slate-500">
-              <div className="flex items-center gap-0.5">
-                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">RTL Direction:</span>
-                <button
-                  onClick={() => setPreferences(p => ({ ...p, editorRtl: false }))}
-                  className={`px-1.5 py-0.5 text-[9px] font-extrabold rounded cursor-pointer transition-all ${
-                    !preferences.editorRtl 
-                      ? `${themeClasses.accentBg} text-white border-transparent shadow-sm` 
-                      : 'bg-slate-200/50 hover:bg-slate-200 text-slate-600'
-                  }`}
-                >
-                  LTR
-                </button>
-                <button
-                  onClick={() => setPreferences(p => ({ ...p, editorRtl: true }))}
-                  className={`px-1.5 py-0.5 text-[9px] font-extrabold rounded cursor-pointer transition-all ${
-                    preferences.editorRtl 
-                      ? `${themeClasses.accentBg} text-white border-transparent shadow-sm` 
-                      : 'bg-slate-200/50 hover:bg-slate-200 text-slate-600'
-                  }`}
-                >
-                  RTL
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* PAGE FOOTER TEXTS INPUTS (Desktop only - on Mobile managed via Bottom Sheet) */}
-          <div className={`hidden sm:flex flex-col px-4 py-2 border-b shrink-0 select-none ${themeClasses.footerInputsBg}`}>
-            <div className="flex items-center justify-between mb-1">
-              <span className={`text-[10px] font-bold uppercase tracking-wider ${themeClasses.footerLabelText}`}>
-                Page Footers
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1 relative">
-                <div className="flex items-center justify-between">
-                  <label className={`block text-[10px] font-bold uppercase tracking-wider ${preferences.editorRtl ? 'text-right' : 'text-left'} ${themeClasses.footerLabelText}`} dir={preferences.editorRtl ? "rtl" : "ltr"}>
-                    Left Footer (Date)
-                  </label>
-                </div>
-                <input 
-                  type="text"
-                  value={leftFooterText}
-                  onChange={(e) => setLeftFooterText(e.target.value)}
-                  placeholder="محرم 1447"
-                  className={`w-full ${preferences.editorRtl ? 'text-right' : 'text-left'} border rounded-lg px-2.5 py-1 text-xs font-semibold outline-none focus:ring-1 transition-all placeholder:text-slate-300 placeholder:font-normal animate-fade-in ${themeClasses.footerInputBox}`}
-                  dir={preferences.editorRtl ? "rtl" : "ltr"}
-                />
-              </div>
-
-              <div className="space-y-1 relative">
-                <div className="flex items-center justify-between">
-                  <label className={`block text-[10px] font-bold uppercase tracking-wider ${preferences.editorRtl ? 'text-right' : 'text-left'} ${themeClasses.footerLabelText}`} dir={preferences.editorRtl ? "rtl" : "ltr"}>
-                    Right Footer (Poet)
-                  </label>
-                </div>
-                <input 
-                  type="text"
-                  value={rightFooterText}
-                  onChange={(e) => setRightFooterText(e.target.value)}
-                  placeholder=""
-                  className={`w-full ${preferences.editorRtl ? 'text-right' : 'text-left'} border rounded-lg px-2.5 py-1 text-xs font-semibold outline-none focus:ring-1 transition-all animate-fade-in ${themeClasses.footerInputBox}`}
-                  dir={preferences.editorRtl ? "rtl" : "ltr"}
-                />
-              </div>
-            </div>
-          </div>
+          {/* DESKTOP EDITOR TOOLBAR (Desktop only) */}
+          {!isMobile && (
+            <DesktopEditorToolbar
+              onInsertTag={handleInsertTag}
+              onUndo={handleUndo}
+              onRedo={handleRedo}
+              onClear={handleClearText}
+              onOpenMore={() => setShowMobileFooterSheet(true)}
+            />
+          )}
           
           {/* SCROLLABLE EDITOR CONTAINER */}
           <div className="flex-1 flex relative overflow-hidden bg-transparent min-h-0">
@@ -1252,6 +1268,8 @@ export default function App() {
               ref={textareaRef}
               value={code}
               onChange={(e) => setCode(e.target.value)}
+              onFocus={() => setIsEditorFocused(true)}
+              onBlur={() => setIsEditorFocused(false)}
               onScroll={handleScroll}
               onKeyUp={handleCursorMove}
               onSelect={handleCursorMove}
@@ -1353,6 +1371,11 @@ export default function App() {
         {/* RIGHT COMPARTMENT: INTERACTIVE REAL-TIME PAGE TYPESETTER PREVIEW */}
         <section 
           id="preview-section"
+          onClick={() => {
+            if (isMobile && activePreviewPopup !== 'none') {
+              setActivePreviewPopup('none');
+            }
+          }}
           className={`flex-1 ${themeClasses.workspaceBg} p-4 sm:p-6 pb-20 sm:pb-6 flex-col items-center overflow-y-auto relative scroll-smooth print:p-0 print:bg-white print:overflow-visible print:absolute print:inset-0 print:w-full print:h-auto transition-colors duration-200 ${isMobile && activeTab !== 'preview' ? 'hidden' : 'flex'}`}
         >
           {/* RIGHT SIDE FLOATING BAR FOR PREVIEW SECTION (DESKTOP) */}
@@ -1411,9 +1434,24 @@ export default function App() {
       )}
 
       {/* SETTINGS PANEL DRAWERS */}
-      {showSettings && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/40 backdrop-blur-xs flex justify-end animate-fade-in print:hidden select-none">
-          <div className="w-full sm:w-[420px] bg-slate-50 shadow-2xl h-full flex flex-col animate-slide-left overflow-hidden">
+      <AnimatePresence>
+        {showSettings && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[100] bg-slate-950/40 backdrop-blur-xs flex justify-end print:hidden select-none"
+            onClick={() => setShowSettings(false)}
+          >
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+              className="w-full sm:w-[420px] bg-slate-50 shadow-2xl h-full flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
             {/* Drawer Header */}
             <div className="bg-[#0f172a] text-white px-5 py-4 flex items-center justify-between shrink-0 shadow-md">
               <div className="flex items-center gap-2">
@@ -1959,14 +1997,30 @@ export default function App() {
                 View App About
               </button>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+    </AnimatePresence>
 
       {/* EXPORT OPTIONS CONSOLE MODAL */}
-      {showExportModal && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 select-none print:hidden">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100 flex flex-col animate-fade-in">
+      <AnimatePresence>
+        {showExportModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 select-none print:hidden"
+            onClick={() => setShowExportModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100 flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
             {/* Header */}
             <div className="bg-slate-900 text-white p-5 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
@@ -2111,14 +2165,30 @@ export default function App() {
               </div>
 
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+    </AnimatePresence>
 
       {/* SYSTEM ABOUT DIALOG MODAL */}
-      {showAbout && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 select-none print:hidden">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100 flex flex-col animate-fade-in">
+      <AnimatePresence>
+        {showAbout && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 select-none print:hidden"
+            onClick={() => setShowAbout(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100 flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
             {/* Visual Header */}
             <div className="bg-slate-900 text-white p-6 flex flex-col items-center gap-2 relative">
               <button 
@@ -2182,14 +2252,30 @@ export default function App() {
                 </a>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+    </AnimatePresence>
 
       {/* PDF PRINT INSTRUCTION TOAST BANNER OVERLAY */}
-      {showPrintToast && (
-        <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 select-none print:hidden">
-          <div className="bg-white p-6 rounded-xl shadow-2xl max-w-sm text-center border border-slate-100 flex flex-col items-center gap-3.5">
+      <AnimatePresence>
+        {showPrintToast && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 select-none print:hidden"
+            onClick={() => setShowPrintToast(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="bg-white p-6 rounded-xl shadow-2xl max-w-sm text-center border border-slate-100 flex flex-col items-center gap-3.5"
+              onClick={(e) => e.stopPropagation()}
+            >
             <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shadow-sm shrink-0 select-none">
               <Printer size={22} />
             </div>
@@ -2253,14 +2339,30 @@ export default function App() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+    </AnimatePresence>
 
       {/* CUSTOM CONFIRMATION MODAL OVERLAY */}
-      {confirmConfig && (
-        <div className="fixed inset-0 z-[1100] bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden select-none">
-          <div className={`w-full max-w-sm rounded-2xl shadow-2xl border p-5 ${themeClasses.cardBg} animate-scale-in`}>
+      <AnimatePresence>
+        {confirmConfig && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[1100] bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden select-none"
+            onClick={() => setConfirmConfig(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className={`w-full max-w-sm rounded-2xl shadow-2xl border p-5 ${themeClasses.cardBg}`}
+              onClick={(e) => e.stopPropagation()}
+            >
             <h3 className="text-sm font-bold tracking-tight mb-2">{confirmConfig.title}</h3>
             <p className="text-xs text-slate-500 mb-4 leading-relaxed">{confirmConfig.message}</p>
             <div className="flex items-center justify-end gap-2.5">
@@ -2280,9 +2382,10 @@ export default function App() {
                 Confirm
               </button>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+    </AnimatePresence>
 
       {/* MOBILE BOTTOM EDITING TOOLBAR */}
       {isMobile && activeTab === 'editor' && (
@@ -2292,6 +2395,7 @@ export default function App() {
           onRedo={handleRedo}
           onClear={handleClearText}
           onOpenMore={() => setShowMobileFooterSheet(true)}
+          isKeyboardActive={isKeyboardActive}
         />
       )}
 
@@ -2300,7 +2404,8 @@ export default function App() {
         <MobilePreviewToolbar
           preferences={preferences}
           setPreferences={setPreferences}
-          onPopupStateChange={setIsPreviewPopupOpen}
+          activePopup={activePreviewPopup}
+          setActivePopup={setActivePreviewPopup}
         />
       )}
 

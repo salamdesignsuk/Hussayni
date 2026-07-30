@@ -16,6 +16,7 @@ interface MobileBottomToolbarProps {
   onRedo: () => void;
   onClear: () => void;
   onOpenMore: () => void;
+  isKeyboardActive?: boolean;
 }
 
 export const MobileBottomToolbar: React.FC<MobileBottomToolbarProps> = ({
@@ -23,7 +24,8 @@ export const MobileBottomToolbar: React.FC<MobileBottomToolbarProps> = ({
   onUndo,
   onRedo,
   onClear,
-  onOpenMore
+  onOpenMore,
+  isKeyboardActive = false
 }) => {
   const lastTouchTime = React.useRef(0);
 
@@ -67,7 +69,13 @@ export const MobileBottomToolbar: React.FC<MobileBottomToolbarProps> = ({
   };
 
   return (
-    <div className="fixed bottom-0 -left-px -right-px -bottom-px z-40 bg-slate-900 border-t border-slate-800 text-slate-100 px-2.5 py-2 flex items-center justify-between pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl select-none print:hidden">
+    <div 
+      className={`${isKeyboardActive ? 'absolute' : 'fixed'} bottom-0 left-0 right-0 z-40 bg-slate-900 border-t border-slate-800 text-slate-100 px-2.5 py-2 flex items-center justify-between shadow-2xl select-none print:hidden ${
+        isKeyboardActive 
+          ? 'pb-2' 
+          : 'pb-[calc(0.5rem+env(safe-area-inset-bottom))]'
+      }`}
+    >
       
       {/* Editor Tags Quick Insertion (H, B, F) */}
       <div className="flex items-center gap-1">

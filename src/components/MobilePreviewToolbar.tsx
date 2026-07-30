@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { 
   Type, 
   MoveVertical, 
@@ -9,30 +9,24 @@ import {
   Plus, 
   FileText
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { UserPreferences } from '../utils/documentModel';
+
+export type ActivePopup = 'none' | 'minSize' | 'size' | 'spacing' | 'zoom';
 
 interface MobilePreviewToolbarProps {
   preferences: UserPreferences;
   setPreferences: React.Dispatch<React.SetStateAction<UserPreferences>>;
-  onPopupStateChange?: (isOpen: boolean) => void;
+  activePopup: ActivePopup;
+  setActivePopup: React.Dispatch<React.SetStateAction<ActivePopup>>;
 }
-
-type ActivePopup = 'none' | 'minSize' | 'size' | 'spacing' | 'zoom';
 
 export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
   preferences,
   setPreferences,
-  onPopupStateChange
+  activePopup,
+  setActivePopup
 }) => {
-  const [activePopup, setActivePopup] = useState<ActivePopup>('none');
-
-  useEffect(() => {
-    onPopupStateChange?.(activePopup !== 'none');
-    return () => {
-      onPopupStateChange?.(false);
-    };
-  }, [activePopup, onPopupStateChange]);
-
   const togglePopup = (popup: ActivePopup) => {
     setActivePopup(prev => prev === popup ? 'none' : popup);
   };
@@ -116,46 +110,69 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
   return (
     <>
       {/* FLOATING PILL POPUP (MATCHING SWITCHER PILL POSITION & SIZING) */}
-      {activePopup !== 'none' && (
-        <div className="fixed bottom-[calc(3.25rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-50 bg-slate-900 p-1 rounded-full border border-slate-700/80 flex items-center gap-1.5 shadow-2xl select-none print:hidden animate-fade-in">
-          <button
-            type="button"
-            onClick={() => {
-              if (activePopup === 'minSize') handleMinSizeChange(-1);
-              if (activePopup === 'size') handleSizeChange(-1);
-              if (activePopup === 'spacing') handleSpacingChange(-1);
-              if (activePopup === 'zoom') handleZoomChange(-1);
+      <AnimatePresence>
+        {activePopup !== 'none' && (
+          <motion.div
+            key="floating-pill"
+            initial={{ opacity: 0, y: 15, x: '-50%', scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, x: '-50%', scale: 1 }}
+            exit={{ 
+              opacity: 0, 
+              y: 12, 
+              scale: 0.92,
+              transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } 
             }}
-            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 active:scale-90 active:bg-emerald-500 active:text-slate-950 text-white flex items-center justify-center transition-all cursor-pointer border border-slate-700/80"
-            title="Decrease"
+            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+            className="fixed bottom-[calc(3.25rem+env(safe-area-inset-bottom))] left-1/2 z-50 bg-slate-900 p-1 rounded-full border border-slate-700/80 flex items-center gap-1.5 shadow-2xl select-none print:hidden"
           >
-            <Minus size={15} />
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (activePopup === 'minSize') handleMinSizeChange(-1);
+                if (activePopup === 'size') handleSizeChange(-1);
+                if (activePopup === 'spacing') handleSpacingChange(-1);
+                if (activePopup === 'zoom') handleZoomChange(-1);
+              }}
+              className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 active:scale-90 active:bg-emerald-500 active:text-slate-950 text-white flex items-center justify-center transition-all cursor-pointer border border-slate-700/80"
+              title="Decrease"
+            >
+              <Minus size={15} />
+            </button>
 
-          <div className="px-1 min-w-[64px] h-8 flex items-center justify-center text-center">
-            <span className="text-[14px] font-black text-emerald-400 tracking-tight leading-none">
-              {activePopup === 'minSize' && `${minSizeBtnValue}px`}
-              {activePopup === 'size' && (isHeaderMode ? `${sizeBtnValue}%` : `${sizeBtnValue}px`)}
-              {activePopup === 'spacing' && spacingBtnValue}
-              {activePopup === 'zoom' && zoomBtnValue}
-            </span>
-          </div>
+            <div className="px-1 min-w-[64px] h-8 flex items-center justify-center text-center overflow-hidden">
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={activePopup}
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -5 }}
+                  transition={{ duration: 0.12, ease: 'easeOut' }}
+                  className="text-[14px] font-black text-emerald-400 tracking-tight leading-none block whitespace-nowrap"
+                >
+                  {activePopup === 'minSize' && `${minSizeBtnValue}px`}
+                  {activePopup === 'size' && (isHeaderMode ? `${sizeBtnValue}%` : `${sizeBtnValue}px`)}
+                  {activePopup === 'spacing' && spacingBtnValue}
+                  {activePopup === 'zoom' && zoomBtnValue}
+                </motion.span>
+              </AnimatePresence>
+            </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              if (activePopup === 'minSize') handleMinSizeChange(1);
-              if (activePopup === 'size') handleSizeChange(1);
-              if (activePopup === 'spacing') handleSpacingChange(1);
-              if (activePopup === 'zoom') handleZoomChange(1);
-            }}
-            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 active:scale-90 active:bg-emerald-500 active:text-slate-950 text-white flex items-center justify-center transition-all cursor-pointer border border-slate-700/80"
-            title="Increase"
-          >
-            <Plus size={15} />
-          </button>
-        </div>
-      )}
+            <button
+              type="button"
+              onClick={() => {
+                if (activePopup === 'minSize') handleMinSizeChange(1);
+                if (activePopup === 'size') handleSizeChange(1);
+                if (activePopup === 'spacing') handleSpacingChange(1);
+                if (activePopup === 'zoom') handleZoomChange(1);
+              }}
+              className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 active:scale-90 active:bg-emerald-500 active:text-slate-950 text-white flex items-center justify-center transition-all cursor-pointer border border-slate-700/80"
+              title="Increase"
+            >
+              <Plus size={15} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* BOTTOM MOBILE PREVIEW TOOLBAR BAR */}
       <div className="fixed bottom-0 -left-px -right-px -bottom-px z-40 bg-slate-900 border-t border-slate-800 text-slate-100 px-2.5 py-2 flex items-center justify-between pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl select-none print:hidden">
@@ -168,15 +185,25 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
             <button
               type="button"
               onClick={() => togglePopup('minSize')}
-              className={`h-8 px-2.5 rounded-xl flex items-center justify-center gap-1 border transition-all cursor-pointer shadow-sm ${
-                activePopup === 'minSize'
-                  ? 'bg-emerald-500 text-slate-950 border-emerald-500'
-                  : 'bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700/80'
-              }`}
+              className="relative h-8 px-2.5 rounded-xl flex items-center justify-center gap-1 border border-slate-700/80 transition-all cursor-pointer shadow-sm overflow-hidden bg-slate-800/80 hover:bg-slate-700"
               title="Min Paragraph Text Size"
             >
-              <Type size={12} className={activePopup === 'minSize' ? 'text-slate-950' : 'text-emerald-400'} />
-              <span className="text-[13px] font-black">{minSizeBtnValue}</span>
+              <AnimatePresence>
+                {activePopup === 'minSize' && (
+                  <motion.div
+                    layoutId="activePreviewPopupBg"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 bg-emerald-500 z-0"
+                    transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                  />
+                )}
+              </AnimatePresence>
+              <Type size={12} className={`relative z-10 transition-colors duration-150 ${activePopup === 'minSize' ? 'text-slate-950' : 'text-emerald-400'}`} />
+              <span className={`relative z-10 text-[13px] font-black transition-colors duration-150 ${activePopup === 'minSize' ? 'text-slate-950' : 'text-slate-200'}`}>
+                {minSizeBtnValue}
+              </span>
             </button>
           )}
 
@@ -184,15 +211,25 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
           <button
             type="button"
             onClick={() => togglePopup('size')}
-            className={`h-8 px-3 rounded-xl flex items-center justify-center gap-1.5 border transition-all cursor-pointer shadow-sm ${
-              activePopup === 'size'
-                ? 'bg-emerald-500 text-slate-950 border-emerald-500'
-                : 'bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700/80'
-            }`}
+            className="relative h-8 px-3 rounded-xl flex items-center justify-center gap-1.5 border border-slate-700/80 transition-all cursor-pointer shadow-sm overflow-hidden bg-slate-800/80 hover:bg-slate-700"
             title="Max Text Size"
           >
-            <Type size={14} className={activePopup === 'size' ? 'text-slate-950' : 'text-emerald-400'} />
-            <span className="text-[13px] font-black">{sizeBtnValue}</span>
+            <AnimatePresence>
+              {activePopup === 'size' && (
+                <motion.div
+                  layoutId="activePreviewPopupBg"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-emerald-500 z-0"
+                  transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                />
+              )}
+            </AnimatePresence>
+            <Type size={14} className={`relative z-10 transition-colors duration-150 ${activePopup === 'size' ? 'text-slate-950' : 'text-emerald-400'}`} />
+            <span className={`relative z-10 text-[13px] font-black transition-colors duration-150 ${activePopup === 'size' ? 'text-slate-950' : 'text-slate-200'}`}>
+              {sizeBtnValue}
+            </span>
           </button>
         </div>
 
@@ -201,15 +238,25 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
           <button
             type="button"
             onClick={() => togglePopup('spacing')}
-            className={`h-8 px-3 rounded-xl flex items-center justify-center gap-1.5 border transition-all cursor-pointer shadow-sm ${
-              activePopup === 'spacing'
-                ? 'bg-emerald-500 text-slate-950 border-emerald-500'
-                : 'bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700/80'
-            }`}
+            className="relative h-8 px-3 rounded-xl flex items-center justify-center gap-1.5 border border-slate-700/80 transition-all cursor-pointer shadow-sm overflow-hidden bg-slate-800/80 hover:bg-slate-700"
             title="Line Spacing"
           >
-            <MoveVertical size={13} className={activePopup === 'spacing' ? 'text-slate-950' : 'text-emerald-400'} />
-            <span className="text-[13px] font-black">{spacingBtnValue}</span>
+            <AnimatePresence>
+              {activePopup === 'spacing' && (
+                <motion.div
+                  layoutId="activePreviewPopupBg"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-emerald-500 z-0"
+                  transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                />
+              )}
+            </AnimatePresence>
+            <MoveVertical size={13} className={`relative z-10 transition-colors duration-150 ${activePopup === 'spacing' ? 'text-slate-950' : 'text-emerald-400'}`} />
+            <span className={`relative z-10 text-[13px] font-black transition-colors duration-150 ${activePopup === 'spacing' ? 'text-slate-950' : 'text-slate-200'}`}>
+              {spacingBtnValue}
+            </span>
           </button>
         </div>
 
@@ -218,15 +265,25 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
           <button
             type="button"
             onClick={() => togglePopup('zoom')}
-            className={`h-8 px-3 rounded-xl flex items-center justify-center gap-1.5 border transition-all cursor-pointer shadow-sm ${
-              activePopup === 'zoom'
-                ? 'bg-emerald-500 text-slate-950 border-emerald-500'
-                : 'bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700/80'
-            }`}
+            className="relative h-8 px-3 rounded-xl flex items-center justify-center gap-1.5 border border-slate-700/80 transition-all cursor-pointer shadow-sm overflow-hidden bg-slate-800/80 hover:bg-slate-700"
             title="Zoom"
           >
-            <ZoomIn size={13} className={activePopup === 'zoom' ? 'text-slate-950' : 'text-emerald-400'} />
-            <span className="text-[13px] font-black">{zoomBtnValue}</span>
+            <AnimatePresence>
+              {activePopup === 'zoom' && (
+                <motion.div
+                  layoutId="activePreviewPopupBg"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-emerald-500 z-0"
+                  transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                />
+              )}
+            </AnimatePresence>
+            <ZoomIn size={13} className={`relative z-10 transition-colors duration-150 ${activePopup === 'zoom' ? 'text-slate-950' : 'text-emerald-400'}`} />
+            <span className={`relative z-10 text-[13px] font-black transition-colors duration-150 ${activePopup === 'zoom' ? 'text-slate-950' : 'text-slate-200'}`}>
+              {zoomBtnValue}
+            </span>
           </button>
         </div>
 
