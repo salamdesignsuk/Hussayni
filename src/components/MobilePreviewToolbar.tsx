@@ -88,10 +88,21 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
     });
   };
 
+  const currentZoom = isHeaderMode 
+    ? (preferences.zoomH !== undefined ? preferences.zoomH : preferences.zoom)
+    : (preferences.zoomP !== undefined ? preferences.zoomP : preferences.zoom);
+
   const handleZoomChange = (delta: number) => {
     setPreferences(p => {
-      const newZoom = Math.min(150, Math.max(20, p.zoom + delta * 10));
-      return { ...p, zoom: newZoom };
+      if (p.outputMode === 'H') {
+        const curZoom = p.zoomH !== undefined ? p.zoomH : p.zoom;
+        const newZoom = Math.min(150, Math.max(20, curZoom + delta * 10));
+        return { ...p, zoomH: newZoom };
+      } else {
+        const curZoom = p.zoomP !== undefined ? p.zoomP : p.zoom;
+        const newZoom = Math.min(150, Math.max(20, curZoom + delta * 10));
+        return { ...p, zoomP: newZoom };
+      }
     });
   };
 
@@ -105,7 +116,39 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
     ? `${(preferences.headerLineSpacing || 1.2).toFixed(1)}x` 
     : (preferences.paragraphSpacing === 'compact' ? 'Compact' : preferences.paragraphSpacing === 'relaxed' ? 'Relaxed' : 'Normal');
 
-  const zoomBtnValue = `${preferences.zoom}%`;
+  const zoomBtnValue = `${currentZoom}%`;
+
+  const currentTheme = preferences.theme || 'slate';
+  const themeClasses = {
+    slate: {
+      bg: 'bg-slate-950 border-slate-800 text-white',
+      btnBg: 'bg-slate-900 border-slate-800 text-slate-200 hover:bg-slate-800/80',
+      activeAccent: 'text-emerald-400',
+      floatingBg: 'bg-slate-900 border-slate-700/80',
+      pillBtn: 'bg-slate-800 hover:bg-slate-700 text-white border-slate-700/80'
+    },
+    warm: {
+      bg: 'bg-[#3e2723] border-[#4e342e] text-[#fbe9e7]',
+      btnBg: 'bg-[#2d1f18] border-[#4e342e] text-amber-200 hover:bg-[#1d140f]',
+      activeAccent: 'text-amber-400',
+      floatingBg: 'bg-[#2d1f18] border-[#4e342e]',
+      pillBtn: 'bg-[#3e2723] hover:bg-[#4e342e] text-[#fbe9e7] border-[#4e342e]'
+    },
+    dark: {
+      bg: 'bg-[#030712] border-slate-900 text-white',
+      btnBg: 'bg-[#0f172a] border-slate-800 text-slate-200 hover:bg-[#0f172a]/80',
+      activeAccent: 'text-emerald-400',
+      floatingBg: 'bg-[#0f172a] border-slate-800/80',
+      pillBtn: 'bg-[#030712] hover:bg-[#0f172a] text-white border-slate-800/80'
+    },
+    classic: {
+      bg: 'bg-neutral-900 border-neutral-800 text-white',
+      btnBg: 'bg-neutral-800 border-neutral-700 text-white hover:bg-neutral-750',
+      activeAccent: 'text-white',
+      floatingBg: 'bg-neutral-950 border-neutral-800',
+      pillBtn: 'bg-neutral-800 hover:bg-neutral-700 text-white border-neutral-700'
+    }
+  }[currentTheme];
 
   return (
     <>
@@ -123,7 +166,7 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
               transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } 
             }}
             transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-            className="fixed bottom-[calc(3.25rem+env(safe-area-inset-bottom))] left-1/2 z-50 bg-slate-900 p-1 rounded-full border border-slate-700/80 flex items-center gap-1.5 shadow-2xl select-none print:hidden"
+            className={`fixed bottom-[calc(3.25rem+env(safe-area-inset-bottom))] left-1/2 z-50 ${themeClasses.floatingBg} p-1 rounded-full flex items-center gap-1.5 shadow-2xl select-none print:hidden`}
           >
             <button
               type="button"
@@ -133,7 +176,7 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
                 if (activePopup === 'spacing') handleSpacingChange(-1);
                 if (activePopup === 'zoom') handleZoomChange(-1);
               }}
-              className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 active:scale-90 active:bg-emerald-500 active:text-slate-950 text-white flex items-center justify-center transition-all cursor-pointer border border-slate-700/80"
+              className={`w-8 h-8 rounded-full ${themeClasses.pillBtn} active:scale-90 active:bg-emerald-500 active:text-slate-950 flex items-center justify-center transition-all cursor-pointer`}
               title="Decrease"
             >
               <Minus size={15} />
@@ -165,7 +208,7 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
                 if (activePopup === 'spacing') handleSpacingChange(1);
                 if (activePopup === 'zoom') handleZoomChange(1);
               }}
-              className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 active:scale-90 active:bg-emerald-500 active:text-slate-950 text-white flex items-center justify-center transition-all cursor-pointer border border-slate-700/80"
+              className={`w-8 h-8 rounded-full ${themeClasses.pillBtn} active:scale-90 active:bg-emerald-500 active:text-slate-950 flex items-center justify-center transition-all cursor-pointer`}
               title="Increase"
             >
               <Plus size={15} />
@@ -175,7 +218,7 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
       </AnimatePresence>
 
       {/* BOTTOM MOBILE PREVIEW TOOLBAR BAR */}
-      <div className="fixed bottom-0 -left-px -right-px -bottom-px z-40 bg-slate-900 border-t border-slate-800 text-slate-100 px-2.5 py-2 flex items-center justify-between pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl select-none print:hidden">
+      <div className={`fixed bottom-0 -left-px -right-px -bottom-px z-40 ${themeClasses.bg} border-t px-2.5 py-2 flex items-center justify-between pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl select-none print:hidden`}>
         
         {/* LEFT GROUP: Min Font Size (P mode only) & Max Font Size */}
         <div className="flex items-center gap-1.5 z-50">
@@ -185,7 +228,7 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
             <button
               type="button"
               onClick={() => togglePopup('minSize')}
-              className="relative h-8 px-2.5 rounded-xl flex items-center justify-center gap-1 border border-slate-700/80 transition-all cursor-pointer shadow-sm overflow-hidden bg-slate-800/80 hover:bg-slate-700"
+              className={`relative h-8 px-2.5 rounded-xl flex items-center justify-center gap-1 ${themeClasses.btnBg} transition-all cursor-pointer shadow-sm overflow-hidden`}
               title="Min Paragraph Text Size"
             >
               <AnimatePresence>
@@ -211,7 +254,7 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
           <button
             type="button"
             onClick={() => togglePopup('size')}
-            className="relative h-8 px-3 rounded-xl flex items-center justify-center gap-1.5 border border-slate-700/80 transition-all cursor-pointer shadow-sm overflow-hidden bg-slate-800/80 hover:bg-slate-700"
+            className={`relative h-8 px-3 rounded-xl flex items-center justify-center gap-1.5 ${themeClasses.btnBg} transition-all cursor-pointer shadow-sm overflow-hidden`}
             title="Max Text Size"
           >
             <AnimatePresence>
@@ -238,7 +281,7 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
           <button
             type="button"
             onClick={() => togglePopup('spacing')}
-            className="relative h-8 px-3 rounded-xl flex items-center justify-center gap-1.5 border border-slate-700/80 transition-all cursor-pointer shadow-sm overflow-hidden bg-slate-800/80 hover:bg-slate-700"
+            className={`relative h-8 px-3 rounded-xl flex items-center justify-center gap-1.5 ${themeClasses.btnBg} transition-all cursor-pointer shadow-sm overflow-hidden`}
             title="Line Spacing"
           >
             <AnimatePresence>
@@ -265,7 +308,7 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
           <button
             type="button"
             onClick={() => togglePopup('zoom')}
-            className="relative h-8 px-3 rounded-xl flex items-center justify-center gap-1.5 border border-slate-700/80 transition-all cursor-pointer shadow-sm overflow-hidden bg-slate-800/80 hover:bg-slate-700"
+            className={`relative h-8 px-3 rounded-xl flex items-center justify-center gap-1.5 ${themeClasses.btnBg} transition-all cursor-pointer shadow-sm overflow-hidden`}
             title="Zoom"
           >
             <AnimatePresence>
@@ -295,7 +338,7 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
             <button
               type="button"
               onClick={handleToggleTheme}
-              className="h-8 px-2.5 bg-slate-800/80 hover:bg-slate-700 active:scale-95 text-slate-200 border border-slate-700/80 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              className={`h-8 px-2.5 ${themeClasses.btnBg} active:scale-95 text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm`}
               title="Toggle Light / Dark Theme"
             >
               {isDarkTheme ? (
@@ -316,7 +359,7 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
           <button
             type="button"
             onClick={() => setPreferences(p => ({ ...p, outputMode: p.outputMode === 'H' ? 'P' : 'H' }))}
-            className="h-8 px-2.5 bg-slate-800/80 hover:bg-slate-700 active:scale-95 text-slate-200 border border-slate-700/80 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-sm"
+            className={`h-8 px-2.5 ${themeClasses.btnBg} active:scale-95 text-slate-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-sm`}
             title="Toggle Header Mode vs Full Poem Mode"
           >
             {isHeaderMode ? (

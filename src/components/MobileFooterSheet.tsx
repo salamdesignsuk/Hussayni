@@ -71,6 +71,58 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
   const [leftEnabled, setLeftEnabled] = useState<boolean>(leftFooterText.trim() !== '');
   const [rightEnabled, setRightEnabled] = useState<boolean>(rightFooterText.trim() !== '');
 
+  const currentTheme = preferences?.theme || 'slate';
+  const sheetTheme = {
+    slate: {
+      bg: 'bg-slate-950 border-slate-800 text-slate-100',
+      titleBorder: 'border-slate-800/60',
+      titleText: 'text-slate-400',
+      cardBg: 'bg-slate-900/60 border-slate-800/60 text-slate-200',
+      label: 'text-slate-200',
+      controlBg: 'bg-slate-950 border-slate-800',
+      controlBtn: 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-750',
+      pillBg: 'bg-slate-800 hover:bg-slate-750 text-slate-300',
+      input: 'bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-emerald-500',
+      borderAccent: 'border-slate-800/40',
+    },
+    warm: {
+      bg: 'bg-[#2d1f18] border border-[#3e2723] text-[#fbe9e7]',
+      titleBorder: 'border-[#3e2723]/60',
+      titleText: 'text-amber-200/70',
+      cardBg: 'bg-[#3e2723]/40 border border-[#4e342e]/60 text-amber-100',
+      label: 'text-amber-100',
+      controlBg: 'bg-[#1d140f] border border-[#3e2723]',
+      controlBtn: 'bg-[#3e2723] hover:bg-[#4e342e] text-[#fbe9e7] border-[#4e342e]',
+      pillBg: 'bg-[#4e342e]/70 hover:bg-[#4e342e] text-[#fbe9e7]/90',
+      input: 'bg-[#1d140f] border border-[#3e2723] text-[#fbe9e7] placeholder:text-amber-900/60 focus:border-amber-500',
+      borderAccent: 'border-[#3e2723]/40',
+    },
+    dark: {
+      bg: 'bg-[#030712] border border-slate-900 text-slate-100',
+      titleBorder: 'border-slate-900/60',
+      titleText: 'text-slate-400',
+      cardBg: 'bg-[#0f172a]/60 border border-slate-800/60 text-slate-200',
+      label: 'text-slate-200',
+      controlBg: 'bg-[#000000] border border-slate-900',
+      controlBtn: 'bg-[#1e293b] hover:bg-slate-800 text-slate-200 border-slate-700/85',
+      pillBg: 'bg-slate-800 hover:bg-slate-700 text-slate-300',
+      input: 'bg-[#000000] border border-slate-900 text-white placeholder:text-slate-600 focus:border-emerald-400',
+      borderAccent: 'border-slate-800/40',
+    },
+    classic: {
+      bg: 'bg-neutral-900 border border-neutral-800 text-white',
+      titleBorder: 'border-neutral-800/60',
+      titleText: 'text-neutral-400',
+      cardBg: 'bg-neutral-950/60 border border-neutral-800/60 text-white',
+      label: 'text-white',
+      controlBg: 'bg-black border border-neutral-800',
+      controlBtn: 'bg-neutral-800 hover:bg-neutral-700 text-white border-neutral-700',
+      pillBg: 'bg-neutral-800 hover:bg-neutral-750 text-neutral-300',
+      input: 'bg-black border border-neutral-800 text-white placeholder:text-neutral-600 focus:border-white',
+      borderAccent: 'border-neutral-800/40',
+    }
+  }[currentTheme];
+
   // Extract month and year from leftFooterText if present
   const [selectedMonth, setSelectedMonth] = useState<string>('محرم');
   const [selectedYear, setSelectedYear] = useState<string>('1447');
@@ -164,7 +216,7 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                 onClose();
               }
             }}
-            className="relative z-10 w-full max-w-lg bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[80vh] overflow-hidden text-slate-100 pb-[calc(1rem+env(safe-area-inset-bottom))] select-none"
+            className={`relative z-10 w-full max-w-lg ${sheetTheme.bg} rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[80vh] overflow-hidden pb-[calc(1rem+env(safe-area-inset-bottom))] select-none`}
             dir="ltr"
           >
             {/* iPhone Horizontal Pull/Close Line (Top Handle) */}
@@ -172,7 +224,7 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
               onPointerDown={(e) => {
                 dragControls.start(e);
               }}
-              className="flex justify-center pt-4 pb-3 select-none shrink-0 cursor-grab active:cursor-grabbing touch-none"
+              className="flex justify-center pt-4 pb-1 select-none shrink-0 cursor-grab active:cursor-grabbing touch-none"
             >
               <div 
                 className="w-12 h-1.5 bg-slate-700/80 hover:bg-slate-500 rounded-full select-none"
@@ -180,18 +232,23 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
               />
             </div>
 
+            {/* Title */}
+            <div className={`text-center pt-1 pb-3 shrink-0 select-none border-b ${sheetTheme.titleBorder} mb-3.5`}>
+              <h3 className={`text-xs font-black uppercase tracking-widest ${sheetTheme.titleText}`}>Footer Settings</h3>
+            </div>
+
             {/* Modal Body - 2-Column Side-By-Side Layout for Left & Right Footers */}
             <div className="px-3.5 sm:px-5 pb-4 overflow-y-auto font-sans text-xs select-none">
               <div className="grid grid-cols-2 gap-2.5 items-start">
                 
                 {/* LEFT COLUMN: Date (left footer) */}
-                <div className={`bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3 select-none transition-all duration-200 ${leftEnabled ? 'h-auto' : 'h-[56px] flex items-center justify-between'}`}>
+                <div className={`${sheetTheme.cardBg} rounded-2xl p-3 select-none transition-all duration-200 ${leftEnabled ? 'h-auto' : 'h-[56px] flex items-center justify-between'}`}>
                   {leftEnabled ? (
                     <div className="space-y-2.5 w-full">
                       <div className="flex items-center justify-between gap-1 select-none">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <Calendar size={14} className="text-emerald-400 shrink-0" />
-                          <span className="font-bold text-slate-200 text-xs sm:text-sm truncate">Date (left)</span>
+                          <span className="font-bold text-xs sm:text-sm truncate">Date (left)</span>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer shrink-0">
                           <input 
@@ -204,9 +261,9 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                         </label>
                       </div>
 
-                      <div className="space-y-2 pt-2 border-t border-slate-700/40 select-none">
+                      <div className={`space-y-2 pt-2 border-t ${sheetTheme.borderAccent} select-none`}>
                         {/* Hijri Year Controls (- Year +) */}
-                        <div className="flex items-center justify-between gap-1 bg-slate-900 border border-slate-700 rounded-xl p-1 select-none">
+                        <div className={`flex items-center justify-between gap-1 ${sheetTheme.controlBg} rounded-xl p-1 select-none`}>
                           <button
                             type="button"
                             onClick={() => {
@@ -214,7 +271,7 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                               const newYear = Math.max(1300, numericYear - 1);
                               handleApplyPresetMonthYear(selectedMonth, newYear.toString());
                             }}
-                            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 hover:text-emerald-400 active:scale-95 text-slate-200 flex items-center justify-center transition-all cursor-pointer border border-slate-700/80 shrink-0"
+                            className={`w-8 h-8 rounded-full ${sheetTheme.controlBtn} hover:text-emerald-400 active:scale-95 flex items-center justify-center transition-all cursor-pointer shrink-0`}
                             title="Previous Year"
                           >
                             <Minus size={13} />
@@ -236,7 +293,7 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                               const newYear = Math.min(1600, numericYear + 1);
                               handleApplyPresetMonthYear(selectedMonth, newYear.toString());
                             }}
-                            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 hover:text-emerald-400 active:scale-95 text-slate-200 flex items-center justify-center transition-all cursor-pointer border border-slate-700/80 shrink-0"
+                            className={`w-8 h-8 rounded-full ${sheetTheme.controlBtn} hover:text-emerald-400 active:scale-95 flex items-center justify-center transition-all cursor-pointer shrink-0`}
                             title="Next Year"
                           >
                             <Plus size={13} />
@@ -253,7 +310,7 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                               className={`px-1 py-1 rounded-lg text-[9px] sm:text-[10px] font-bold transition-all text-center cursor-pointer select-none truncate ${
                                 selectedMonth === m
                                   ? 'bg-emerald-500 text-slate-950 font-black'
-                                  : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700'
+                                  : `${sheetTheme.pillBg}`
                               }`}
                               title={m}
                             >
@@ -273,7 +330,7 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                             }}
                             placeholder="Custom date"
                             dir={preferences?.editorRtl ? "rtl" : "ltr"}
-                            className={`w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs sm:text-sm text-white placeholder:text-slate-500 outline-none focus:border-emerald-500 transition-all select-text ${preferences?.editorRtl ? 'text-right' : 'text-left'}`}
+                            className={`w-full ${sheetTheme.input} rounded-xl px-2.5 py-1.5 text-xs sm:text-sm outline-none transition-all select-text ${preferences?.editorRtl ? 'text-right' : 'text-left'}`}
                           />
                         </div>
                       </div>
@@ -282,7 +339,7 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                     <>
                       <div className="flex items-center gap-1.5 min-w-0">
                         <Calendar size={14} className="text-emerald-400 shrink-0" />
-                        <span className="font-bold text-slate-200 text-xs sm:text-sm truncate">Date (left)</span>
+                        <span className="font-bold text-xs sm:text-sm truncate">Date (left)</span>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer shrink-0">
                         <input 
@@ -298,13 +355,13 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                 </div>
 
                 {/* RIGHT COLUMN: Poet name (right footer) */}
-                <div className={`bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3 select-none transition-all duration-200 ${rightEnabled ? 'h-auto' : 'h-[56px] flex items-center justify-between'}`}>
+                <div className={`${sheetTheme.cardBg} rounded-2xl p-3 select-none transition-all duration-200 ${rightEnabled ? 'h-auto' : 'h-[56px] flex items-center justify-between'}`}>
                   {rightEnabled ? (
                     <div className="space-y-2.5 w-full">
                       <div className="flex items-center justify-between gap-1 select-none">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <Feather size={14} className="text-emerald-400 shrink-0" />
-                          <span className="font-bold text-slate-200 text-xs sm:text-sm truncate">Poet (right)</span>
+                          <span className="font-bold text-xs sm:text-sm truncate">Poet (right)</span>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer shrink-0">
                           <input 
@@ -317,7 +374,7 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                         </label>
                       </div>
 
-                      <div className="pt-2 border-t border-slate-700/40 space-y-2 select-none">
+                      <div className={`pt-2 border-t ${sheetTheme.borderAccent} space-y-2 select-none`}>
                         <div className="relative">
                           <input 
                             type="text"
@@ -325,7 +382,7 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                             onChange={(e) => setRightFooterText(e.target.value)}
                             placeholder="Poet name"
                             dir={preferences?.editorRtl ? "rtl" : "ltr"}
-                            className={`w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs sm:text-sm text-white outline-none focus:border-emerald-500 transition-all select-text ${preferences?.editorRtl ? 'text-right' : 'text-left'}`}
+                            className={`w-full ${sheetTheme.input} rounded-xl px-2.5 py-1.5 text-xs sm:text-sm outline-none transition-all select-text ${preferences?.editorRtl ? 'text-right' : 'text-left'}`}
                           />
                         </div>
                       </div>
@@ -334,7 +391,7 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                     <>
                       <div className="flex items-center gap-1.5 min-w-0">
                         <Feather size={14} className="text-emerald-400 shrink-0" />
-                        <span className="font-bold text-slate-200 text-xs sm:text-sm truncate">Poet (right)</span>
+                        <span className="font-bold text-xs sm:text-sm truncate">Poet (right)</span>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer shrink-0">
                         <input 
@@ -350,10 +407,10 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                 </div>
 
                 {/* COLUMN 1 (ROW 2): Display Page Numbers */}
-                <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3 select-none col-span-1 h-[56px] flex items-center justify-between">
+                <div className={`${sheetTheme.cardBg} rounded-2xl p-3 select-none col-span-1 h-[56px] flex items-center justify-between`}>
                   <div className="flex items-center gap-1.5 min-w-0">
                     <Hash size={14} className="text-emerald-400 shrink-0" />
-                    <span className="font-bold text-slate-200 text-xs sm:text-sm truncate">Page Numbers</span>
+                    <span className="font-bold text-xs sm:text-sm truncate">Page Numbers</span>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer shrink-0">
                     <input 
@@ -371,12 +428,12 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                 </div>
 
                 {/* COLUMN 2 (ROW 2): Footer Font Size */}
-                <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3 select-none col-span-1 h-[56px] flex items-center justify-between">
+                <div className={`${sheetTheme.cardBg} rounded-2xl p-3 select-none col-span-1 h-[56px] flex items-center justify-between`}>
                   <div className="flex items-center gap-1.5 min-w-0">
                     <Type size={14} className="text-emerald-400 shrink-0" />
-                    <span className="font-bold text-slate-200 text-xs sm:text-sm truncate">Size</span>
+                    <span className="font-bold text-xs sm:text-sm truncate">Size</span>
                   </div>
-                  <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg h-7 overflow-hidden select-none shrink-0">
+                  <div className={`flex items-center ${sheetTheme.controlBg} rounded-lg h-7 overflow-hidden select-none shrink-0`}>
                     <button
                       type="button"
                       onClick={() => {
@@ -384,7 +441,7 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                           setPreferences(p => ({ ...p, footerFontSize: Math.max(10, (p.footerFontSize || 14) - 1) }));
                         }
                       }}
-                      className="h-full w-7 flex items-center justify-center bg-slate-800 hover:bg-slate-700 hover:text-emerald-400 active:scale-95 text-slate-200 transition-all cursor-pointer shrink-0 border-r border-slate-700/60"
+                      className={`h-full w-7 flex items-center justify-center ${sheetTheme.controlBtn} hover:text-emerald-400 active:scale-95 transition-all cursor-pointer shrink-0 border-r ${sheetTheme.borderAccent}`}
                       title="Decrease Footer Size"
                     >
                       <Minus size={11} />
@@ -401,7 +458,7 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                           setPreferences(p => ({ ...p, footerFontSize: Math.min(20, (p.footerFontSize || 14) + 1) }));
                         }
                       }}
-                      className="h-full w-7 flex items-center justify-center bg-slate-800 hover:bg-slate-700 hover:text-emerald-400 active:scale-95 text-slate-200 transition-all cursor-pointer shrink-0 border-l border-slate-700/60"
+                      className={`h-full w-7 flex items-center justify-center ${sheetTheme.controlBtn} hover:text-emerald-400 active:scale-95 transition-all cursor-pointer shrink-0 border-l ${sheetTheme.borderAccent}`}
                       title="Increase Footer Size"
                     >
                       <Plus size={11} />

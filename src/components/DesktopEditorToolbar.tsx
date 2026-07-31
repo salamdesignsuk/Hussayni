@@ -23,7 +23,7 @@ export const DesktopEditorToolbar: React.FC<DesktopEditorToolbarProps> = ({
 }) => {
   return (
     <div 
-      className="hidden lg:flex w-full bg-slate-900 border-b border-slate-800 text-slate-100 px-4 py-2 items-center justify-between shadow-md select-none print:hidden shrink-0"
+      className="hidden lg:flex w-[calc(100%+1px)] -mr-[1px] z-10 bg-slate-900 border-b border-slate-800 text-slate-100 px-4 py-2 items-center justify-between shadow-md select-none print:hidden shrink-0"
     >
       {/* Editor Tags Quick Insertion (H, B, F) */}
       <div className="flex items-center gap-1.5">

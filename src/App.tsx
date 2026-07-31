@@ -356,6 +356,23 @@ export default function App() {
     updateStorageUsage();
   }, [preferences]);
 
+  // Dynamic theme-color meta tag update for Android PWA / status bar and navigation bar sync
+  useEffect(() => {
+    let themeColor = '#020617'; // default slate (slate-950)
+    if (preferences.theme === 'warm') themeColor = '#3e2723';
+    else if (preferences.theme === 'dark') themeColor = '#030712';
+    else if (preferences.theme === 'classic') themeColor = '#171717';
+
+    // Update the meta theme-color tag in document head
+    let metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (!metaThemeColor) {
+      metaThemeColor = document.createElement('meta');
+      metaThemeColor.setAttribute('name', 'theme-color');
+      document.getElementsByTagName('head')[0].appendChild(metaThemeColor);
+    }
+    metaThemeColor.setAttribute('content', themeColor);
+  }, [preferences.theme]);
+
   // Auto-backup to recent documents list on intervals or edits
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -848,7 +865,7 @@ export default function App() {
 
       {/* SERVICE WORKER PWA UPDATE BANNER */}
       {pwa.needRefresh && !dismissedUpdate && (
-        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white px-4 sm:px-6 h-14 flex items-center justify-between shadow-md z-[99999] select-none shrink-0 border-b border-white/10 animate-fade-in print:hidden">
+        <div className="bg-emerald-700 text-white px-4 sm:px-6 h-[calc(3.5rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)] flex items-center justify-between shadow-md z-[99999] select-none shrink-0 border-b border-white/10 animate-fade-in print:hidden">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <Sparkles className="text-emerald-300 animate-pulse shrink-0" size={16} />
             <span className="text-xs sm:text-sm font-bold tracking-wide truncate">
@@ -866,7 +883,7 @@ export default function App() {
               onClick={() => { 
                 setDismissedUpdate(true); 
                 triggerToast("Update delayed. Will apply next time you open the app."); 
-                pwa.updateServiceWorker(false); 
+                pwa.updateServiceWorker(false);
               }}
               className="text-white/80 hover:text-white px-2.5 py-1 rounded-lg text-xs font-semibold hover:bg-white/10 transition-all cursor-pointer h-8 flex items-center"
             >
@@ -877,18 +894,18 @@ export default function App() {
       )}
 
       {/* HEADER CONTROLS */}
-      <header className={`h-14 ${themeClasses.headerBg} flex items-center justify-between px-2 sm:px-6 shadow-md shrink-0 select-none print:hidden z-30 relative`}>
-        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+      <header className={`${pwa.needRefresh && !dismissedUpdate ? 'h-14 pt-0' : 'h-[calc(3.5rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)]'} ${themeClasses.headerBg} flex items-center justify-between px-2 sm:px-6 shadow-md shrink-0 select-none print:hidden z-30 relative`}>
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1 mr-4">
           
           {/* Logo Button */}
           <div
-            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-black text-base sm:text-lg text-white shrink-0 bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-700 shadow-md shadow-emerald-500/30 ring-1 ring-emerald-400/40 select-none"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-black text-base sm:text-lg text-white shrink-0 bg-emerald-600 shadow-md shadow-emerald-600/20 ring-1 ring-emerald-500/30 select-none"
           >
             H
           </div>
           
           {/* App Title & Subtitle with 2-second Launch Fade Effect to Filename & Save Status */}
-          <div className="relative flex items-center shrink-0 min-w-0">
+          <div className="relative flex items-center min-w-0 flex-1">
             {/* Launch Splash Title: "Hussayni Editor" (0 to 2s) */}
             <div 
               className={`transition-all duration-700 ease-in-out select-none flex items-center ${
@@ -902,67 +919,27 @@ export default function App() {
               </h1>
             </div>
 
-              {/* Filename & Save Status (Cross-fades in after 2s) */}
-              <div 
-                className={`flex items-center gap-2 transition-all duration-700 ease-in-out ${
-                  !isSplashTitle 
-                    ? 'opacity-100 scale-100 pointer-events-auto' 
-                    : 'opacity-0 scale-95 pointer-events-none absolute left-0 top-1/2 -translate-y-1/2'
-                }`}
-              >
-                <input 
-                  type="text"
-                  value={docName}
-                  onChange={(e) => setDocName(e.target.value)}
-                  style={{ width: `${Math.max(8, (docName || '').length + 1)}ch` }}
-                  className="bg-transparent text-white font-extrabold text-xs sm:text-sm outline-none max-w-[45vw] sm:max-w-[240px] md:max-w-[360px] lg:max-w-[500px] focus:border-b focus:border-emerald-400 p-0 m-0 truncate"
-                  title="Click to rename document"
-                  placeholder="Poem_Name"
-                />
-
-                {/* Save Status Badge */}
-                <div className="hidden sm:flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900/90 border border-slate-700/80 shrink-0 select-none">
-                  {saveStatus === 'saving' && (
-                    <span className="text-amber-400 flex items-center gap-1">
-                      <Loader2 size={10} className="animate-spin" />
-                      <span className="hidden sm:inline">Saving…</span>
-                    </span>
-                  )}
-                  {saveStatus === 'saved' && (
-                    <span className="text-emerald-400 flex items-center gap-1">
-                      <CheckCircle2 size={10} />
-                      <span className="hidden sm:inline">Saved</span>
-                    </span>
-                  )}
-                  {saveStatus === 'unsaved' && (
-                    <span className="text-slate-400 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                      <span className="hidden sm:inline">Unsaved</span>
-                    </span>
-                  )}
-                </div>
-              </div>
+            {/* Filename (Cross-fades in after 2s) */}
+            <div 
+              className={`flex items-center gap-2 transition-all duration-700 ease-in-out min-w-0 flex-1 ${
+                !isSplashTitle 
+                  ? 'opacity-100 scale-100 pointer-events-auto' 
+                  : 'opacity-0 scale-95 pointer-events-none absolute left-0 top-1/2 -translate-y-1/2'
+              }`}
+            >
+              <input 
+                type="text"
+                value={docName}
+                onChange={(e) => setDocName(e.target.value)}
+                style={{ 
+                  width: `${Math.max(8, (docName || '').length + 1)}ch`
+                }}
+                className="bg-transparent text-white font-mono font-bold text-[11px] min-[400px]:text-xs sm:text-sm outline-none focus:border-b focus:border-emerald-400 p-0 m-0 truncate min-w-0 max-w-[110px] min-[360px]:max-w-[160px] min-[400px]:max-w-[210px] sm:max-w-[280px] md:max-w-[400px] lg:max-w-[550px] xl:max-w-[750px]"
+                title="Click to rename document"
+                placeholder="Poem_Name"
+              />
             </div>
-
-          {/* Connection badge */}
-          {pwa.isOffline ? (
-            <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
-              <WifiOff size={10} />
-              <span className="hidden sm:inline">Offline Mode</span>
-            </span>
-          ) : (
-            <span className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
-              <Wifi size={10} />
-              <span className="hidden sm:inline">Connected</span>
-            </span>
-          )}
-
-          {/* Offline PWA Ready check */}
-          {pwa.offlineReady && (
-            <span className="text-[10px] text-slate-400 font-medium hidden md:inline select-none">
-              (Cached offline)
-            </span>
-          )}
+          </div>
         </div>
 
         {/* Workspace Quick Actions */}
@@ -979,7 +956,7 @@ export default function App() {
                 className="px-2 py-1.5 sm:px-3 sm:py-1.5 hover:bg-white/10 rounded text-xs font-semibold transition-all duration-150 flex items-center gap-1.5 text-slate-200 cursor-pointer"
                 title="Switch to previously saved workbooks"
               >
-                <History size={13} />
+                <History size={14} className="text-purple-400" />
                 <span className="hidden md:inline">History</span>
                 <ChevronDown size={11} className={`transition-transform duration-150 ${showRecentMenu ? 'rotate-180' : ''}`} />
               </button>
@@ -1011,7 +988,7 @@ export default function App() {
                           <div className="flex items-center gap-2 overflow-hidden">
                              <FileText size={13} className="shrink-0 text-slate-500" />
                             <div className="overflow-hidden">
-                              <p className="text-xs font-medium truncate">{doc.name}</p>
+                              <p className="text-xs font-mono font-bold truncate">{doc.name}</p>
                               <p className="text-[9px] text-slate-500">
                                 {new Date(doc.lastSaved).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </p>
@@ -1040,15 +1017,18 @@ export default function App() {
             <div className="relative">
               <button 
                 onClick={() => {
-                  setShowFileMenu(!showFileMenu);
-                  setShowRecentMenu(false);
+                  if (showRecentMenu) {
+                    setShowRecentMenu(false);
+                  } else {
+                    setShowFileMenu(!showFileMenu);
+                  }
                 }}
-                className="px-2 py-1.5 hover:bg-white/10 rounded text-xs font-semibold transition-all duration-150 flex items-center gap-1 text-slate-200 cursor-pointer"
+                className="p-1.5 min-[400px]:px-2 min-[400px]:py-1.5 hover:bg-white/10 rounded text-xs font-semibold transition-all duration-150 flex items-center gap-1 text-slate-200 cursor-pointer"
                 title="File Actions"
               >
                 <MoreVertical size={14} className="text-slate-400" />
-                <span>File</span>
-                <ChevronDown size={11} className={`transition-transform duration-150 ${showFileMenu ? 'rotate-180' : ''}`} />
+                <span className="hidden min-[400px]:inline">File</span>
+                <ChevronDown size={11} className={`transition-transform duration-150 ${showFileMenu || showRecentMenu ? 'rotate-180' : ''} hidden min-[400px]:inline`} />
               </button>
               {showFileMenu && (
                 <div className="absolute top-10 right-0 w-36 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-1 z-50 text-slate-200 select-none">
@@ -1094,6 +1074,57 @@ export default function App() {
                   </button>
                 </div>
               )}
+              {showRecentMenu && (
+                <div className="absolute top-10 right-0 w-64 sm:w-72 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-2.5 z-50 text-slate-200 select-none">
+                  <p className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
+                    <span>Recent Drafts ({recentDocs.length})</span>
+                    <button 
+                      onClick={() => setShowRecentMenu(false)}
+                      className="text-slate-500 hover:text-slate-300 text-xs px-1 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </p>
+                  <div className="mt-1.5 space-y-0.5 max-h-60 overflow-y-auto">
+                    {recentDocs.length === 0 ? (
+                      <p className="text-xs text-slate-500 p-3 text-center">No cached document logs found.</p>
+                    ) : (
+                      recentDocs.map((doc) => (
+                        <div 
+                          key={doc.id}
+                          onClick={() => {
+                            handleLoadRecent(doc);
+                            setShowRecentMenu(false);
+                          }}
+                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-left ${
+                            doc.name === docName ? 'bg-emerald-950/40 text-emerald-300' : 'hover:bg-white/5 text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 overflow-hidden">
+                             <FileText size={13} className="shrink-0 text-slate-500" />
+                            <div className="overflow-hidden">
+                              <p className="text-xs font-mono font-bold truncate">{doc.name}</p>
+                              <p className="text-[9px] text-slate-500">
+                                {new Date(doc.lastSaved).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteRecent(doc.id, e);
+                            }}
+                            className="p-1 hover:bg-white/10 rounded text-slate-500 hover:text-rose-400 cursor-pointer"
+                            title="Wipe record"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <>
@@ -1102,7 +1133,7 @@ export default function App() {
                 className="px-2 py-1.5 sm:px-3 sm:py-1.5 hover:bg-white/10 rounded text-xs font-semibold transition-all duration-150 flex items-center gap-1.5 text-slate-200 cursor-pointer"
                 title="Create a fresh workbook canvas"
               >
-                <Plus size={14} />
+                <Plus size={14} className="text-emerald-400" />
                 <span className="hidden sm:inline">New</span>
               </button>
               
@@ -1111,7 +1142,7 @@ export default function App() {
                 className="px-2 py-1.5 sm:px-3 sm:py-1.5 hover:bg-white/10 rounded text-xs font-semibold transition-all duration-150 flex items-center gap-1.5 text-slate-200 cursor-pointer"
                 title="Upload custom text file with Hussayni tags"
               >
-                <FolderOpen size={14} />
+                <FolderOpen size={14} className="text-blue-400" />
                 <span className="hidden sm:inline">Open</span>
               </button>
 
@@ -1120,7 +1151,7 @@ export default function App() {
                 className="px-2 py-1.5 sm:px-3 sm:py-1.5 hover:bg-white/10 rounded text-xs font-semibold transition-all duration-150 flex items-center gap-1.5 text-slate-200 cursor-pointer"
                 title="Download source text file markup directly"
               >
-                <Save size={14} />
+                <Save size={14} className="text-amber-400" />
                 <span className="hidden sm:inline">Save</span>
               </button>
             </>
@@ -1128,14 +1159,61 @@ export default function App() {
 
           <div className="h-4 w-px bg-slate-700 mx-0.5 sm:mx-1 hidden sm:block"></div>
 
-          {/* PERSISTENT PUBLISH ACTION BUTTON */}
+          {/* Status Badges Group */}
+          <div className="hidden md:flex items-center gap-1.5 shrink-0 select-none">
+            {/* Save Status Badge */}
+            <div className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900/90 border border-slate-700/80 shrink-0">
+              {saveStatus === 'saving' && (
+                <span className="text-amber-400 flex items-center gap-1 animate-pulse">
+                  <Loader2 size={10} className="animate-spin" />
+                  <span>Saving…</span>
+                </span>
+              )}
+              {saveStatus === 'saved' && (
+                <span className="text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 size={10} />
+                  <span>Saved</span>
+                </span>
+              )}
+              {saveStatus === 'unsaved' && (
+                <span className="text-slate-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                  <span>Unsaved</span>
+                </span>
+              )}
+            </div>
+
+            {/* Connection badge */}
+            {pwa.isOffline ? (
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+                <WifiOff size={10} />
+                <span>Offline</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+                <Wifi size={10} />
+                <span>Connected</span>
+              </span>
+            )}
+
+            {/* Offline PWA Ready check */}
+            {pwa.offlineReady && (
+              <span className="text-[10px] text-slate-400 font-medium hidden lg:inline shrink-0">
+                (Cached)
+              </span>
+            )}
+          </div>
+
+          <div className="h-4 w-px bg-slate-700 mx-0.5 sm:mx-1 hidden md:block"></div>
+
+          {/* PERSISTENT EXPORT ACTION BUTTON */}
           <button 
             onClick={() => setShowExportModal(true)}
-            className="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1 sm:gap-1.5 shadow-md cursor-pointer shrink-0"
-            title="Publish and export compiled document to PDF, ODT, or DOCX"
+            className="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 p-1.5 min-[400px]:px-2.5 min-[400px]:py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1 sm:gap-1.5 shadow-md cursor-pointer shrink-0"
+            title="Export compiled document to PDF, ODT, or DOCX"
           >
-            <UploadCloud size={14} className="shrink-0" />
-            <span className="font-black">Publish</span>
+            <Download size={14} className="shrink-0" />
+            <span className="font-black hidden min-[400px]:inline">Export</span>
           </button>
 
           {/* SETTINGS GEAR ICON */}
@@ -1249,12 +1327,16 @@ export default function App() {
           )}
           
           {/* SCROLLABLE EDITOR CONTAINER */}
-          <div className="flex-1 flex relative overflow-hidden bg-transparent min-h-0">
+          <div className={`flex-1 flex relative overflow-hidden bg-transparent min-h-0 ${preferences.editorRtl ? 'flex-row-reverse' : 'flex-row'}`}>
             {/* Gutter Line Numbers Column */}
             {preferences.showLineNumbers && (
               <div 
                 ref={lineNumbersRef}
-                className={`w-11 text-right pr-2.5 pt-2.5 sm:pt-4 pb-28 sm:pb-8 select-none overflow-hidden font-mono leading-[21px] text-[11px] shrink-0 ${themeClasses.gutterBg}`}
+                className={`w-8 pt-2.5 sm:pt-4 pb-28 sm:pb-8 select-none overflow-hidden font-mono leading-[21px] text-[11px] shrink-0 ${themeClasses.gutterBg} ${
+                  preferences.editorRtl 
+                    ? 'text-left pl-1.5 border-l' 
+                    : 'text-right pr-1.5 border-r'
+                }`}
               >
                 {lineNumbers.map((num) => (
                   <div key={num} className="h-[21px]">{num}</div>
@@ -1384,36 +1466,41 @@ export default function App() {
             setPreferences={setPreferences} 
             onOpenExport={() => setShowExportModal(true)} 
           />
-          {preferences.outputMode === 'H' ? (
-            <HeaderOnlyRenderer 
-              headers={extractedHeaders}
-              fontSize={preferences.headerFontSize || 145}
-              lineSpacing={preferences.headerLineSpacing || 1.2}
-              zoom={preferences.zoom}
-              theme={preferences.headerTheme || 'dark'}
-              docName={docName}
-            />
-          ) : isPaginating && pages.length === 0 ? (
-            <div className="m-auto text-center text-slate-400 flex flex-col items-center gap-3 select-none">
-              <Loader2 size={32} className="animate-spin text-emerald-500" />
-              <p className="text-xs">Recalculating layout using real DOM vectors...</p>
-            </div>
-          ) : pages.length === 0 ? (
-            <div className="m-auto text-center text-slate-400 max-w-sm flex flex-col items-center gap-3 select-none">
-              <AlertCircle size={44} className="text-slate-300 stroke-1" />
-              <p className="text-xs">Enter valid Hussayni Arabic markup on the left editor panel to typeset live pages.</p>
-            </div>
-          ) : (
-            <DocumentRenderer 
-              pages={pages} 
-              zoom={preferences.zoom} 
-              showDebug={preferences.showDebug} 
-              leftFooterText={leftFooterText}
-              rightFooterText={rightFooterText}
-              showPageNumber={preferences.showPageNumber !== false}
-              footerFontSize={preferences.footerFontSize || 14}
-            />
-          )}
+          {(() => {
+            const activeZoom = preferences.outputMode === 'H' 
+              ? (preferences.zoomH !== undefined ? preferences.zoomH : preferences.zoom)
+              : (preferences.zoomP !== undefined ? preferences.zoomP : preferences.zoom);
+            return preferences.outputMode === 'H' ? (
+              <HeaderOnlyRenderer 
+                headers={extractedHeaders}
+                fontSize={preferences.headerFontSize || 145}
+                lineSpacing={preferences.headerLineSpacing || 1.2}
+                zoom={activeZoom}
+                theme={preferences.headerTheme || 'dark'}
+                docName={docName}
+              />
+            ) : isPaginating && pages.length === 0 ? (
+              <div className="m-auto text-center text-slate-400 flex flex-col items-center gap-3 select-none">
+                <Loader2 size={32} className="animate-spin text-emerald-500" />
+                <p className="text-xs">Recalculating layout using real DOM vectors...</p>
+              </div>
+            ) : pages.length === 0 ? (
+              <div className="m-auto text-center text-slate-400 max-w-sm flex flex-col items-center gap-3 select-none">
+                <AlertCircle size={44} className="text-slate-300 stroke-1" />
+                <p className="text-xs">Enter valid Hussayni Arabic markup on the left editor panel to typeset live pages.</p>
+              </div>
+            ) : (
+              <DocumentRenderer 
+                pages={pages} 
+                zoom={activeZoom} 
+                showDebug={preferences.showDebug} 
+                leftFooterText={leftFooterText}
+                rightFooterText={rightFooterText}
+                showPageNumber={preferences.showPageNumber !== false}
+                footerFontSize={preferences.footerFontSize || 14}
+              />
+            );
+          })()}
 
           {/* Compiling spinner toast if paginating */}
           {isPaginating && (
@@ -1453,14 +1540,14 @@ export default function App() {
               onClick={(e) => e.stopPropagation()}
             >
             {/* Drawer Header */}
-            <div className="bg-[#0f172a] text-white px-5 py-4 flex items-center justify-between shrink-0 shadow-md">
+            <div className={`${themeClasses.headerBg} px-5 py-4 flex items-center justify-between shrink-0 shadow-md`}>
               <div className="flex items-center gap-2">
                 <SettingsIcon size={18} className="text-emerald-400" />
                 <h3 className="text-base font-extrabold tracking-tight">Hussayni Settings</h3>
               </div>
               <button 
                 onClick={() => setShowSettings(false)}
-                className="text-slate-400 hover:text-white transition-colors cursor-pointer text-base font-medium p-1"
+                className="hover:opacity-80 transition-opacity cursor-pointer text-base font-medium p-1"
               >
                 ✕
               </button>
@@ -2024,7 +2111,7 @@ export default function App() {
             {/* Header */}
             <div className="bg-slate-900 text-white p-5 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500 flex items-center justify-center text-slate-950 shadow-md">
                   <Download size={18} />
                 </div>
                 <div>
@@ -2070,7 +2157,7 @@ export default function App() {
                   <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0 select-none">
                     <Printer size={18} />
                   </div>
-                  <div className="flex-grow">
+                  <div className="flex-grow min-w-0">
                     <h4 className="font-extrabold text-sm text-slate-900">PDF Document</h4>
                     <p className="text-[11px] text-slate-500 mt-1">
                       Please set correct print settings
@@ -2092,19 +2179,19 @@ export default function App() {
                   <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0 select-none">
                     <FileText size={18} />
                   </div>
-                  <div className="flex-grow">
+                  <div className="flex-grow min-w-0">
                     <h4 className="font-extrabold text-sm text-slate-900">Microsoft Word Document</h4>
                     <button
                       onClick={handleLaunchDocx}
                       disabled={isGeneratingDocx}
-                      className="mt-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1.5 shadow-sm cursor-pointer max-w-full truncate"
+                      className="mt-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1.5 shadow-sm cursor-pointer max-w-full overflow-hidden"
                     >
                       {isGeneratingDocx ? (
                         <Loader2 size={12} className="animate-spin shrink-0" />
                       ) : (
                         <Download size={12} className="shrink-0" />
                       )}
-                      <span className="truncate">
+                      <span className="truncate font-mono font-bold block min-w-0 max-w-[150px] min-[400px]:max-w-[200px] sm:max-w-[340px]">
                         {isGeneratingDocx ? "Compiling XML..." : (docName ? (docName.toLowerCase().endsWith('.docx') ? docName : `${docName}.docx`) : 'document.docx')}
                       </span>
                     </button>
@@ -2117,7 +2204,7 @@ export default function App() {
                 <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0 select-none">
                   <Image size={18} />
                 </div>
-                <div className="flex-grow">
+                <div className="flex-grow min-w-0">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="font-extrabold text-sm text-slate-900">Header Only</h4>
                     <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -2396,6 +2483,7 @@ export default function App() {
           onClear={handleClearText}
           onOpenMore={() => setShowMobileFooterSheet(true)}
           isKeyboardActive={isKeyboardActive}
+          theme={preferences.theme}
         />
       )}
 

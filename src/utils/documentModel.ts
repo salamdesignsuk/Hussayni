@@ -43,6 +43,8 @@ export interface UserPreferences {
   editorFontSize: number;
   editorRtl: boolean;
   zoom: number;
+  zoomH?: number;
+  zoomP?: number;
   showDebug: boolean;
   showPageNumber: boolean;
   footerFontSize: number;
@@ -73,6 +75,8 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   editorFontSize: 13,
   editorRtl: true,
   zoom: 75,
+  zoomH: 75,
+  zoomP: 75,
   showDebug: false,
   showPageNumber: true,
   footerFontSize: 14,

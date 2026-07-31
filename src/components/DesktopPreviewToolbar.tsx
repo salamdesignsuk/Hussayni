@@ -9,7 +9,8 @@ import {
   Plus, 
   Printer,
   X,
-  FileText
+  FileText,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserPreferences } from '../utils/documentModel';
@@ -95,10 +96,21 @@ export const DesktopPreviewToolbar: React.FC<DesktopPreviewToolbarProps> = ({
     });
   };
 
+  const currentZoom = isHeaderMode 
+    ? (preferences.zoomH !== undefined ? preferences.zoomH : preferences.zoom)
+    : (preferences.zoomP !== undefined ? preferences.zoomP : preferences.zoom);
+
   const handleZoomChange = (delta: number) => {
     setPreferences(p => {
-      const newZoom = Math.min(150, Math.max(20, p.zoom + delta * 10));
-      return { ...p, zoom: newZoom };
+      if (p.outputMode === 'H') {
+        const curZoom = p.zoomH !== undefined ? p.zoomH : p.zoom;
+        const newZoom = Math.min(150, Math.max(20, curZoom + delta * 10));
+        return { ...p, zoomH: newZoom };
+      } else {
+        const curZoom = p.zoomP !== undefined ? p.zoomP : p.zoom;
+        const newZoom = Math.min(150, Math.max(20, curZoom + delta * 10));
+        return { ...p, zoomP: newZoom };
+      }
     });
   };
 
@@ -112,7 +124,7 @@ export const DesktopPreviewToolbar: React.FC<DesktopPreviewToolbarProps> = ({
     ? `${(preferences.headerLineSpacing || 1.2).toFixed(1)}x` 
     : (preferences.paragraphSpacing === 'compact' ? 'Compact' : preferences.paragraphSpacing === 'relaxed' ? 'Relaxed' : 'Normal');
 
-  const zoomBtnValue = `${preferences.zoom}%`;
+  const zoomBtnValue = `${currentZoom}%`;
 
   const renderVerticalAdjuster = (
     popupKey: ActivePopup,
@@ -374,7 +386,7 @@ export const DesktopPreviewToolbar: React.FC<DesktopPreviewToolbarProps> = ({
         className="w-11 h-11 rounded-xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 text-slate-200 border border-slate-700/80 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer shadow-md hover:text-emerald-400"
         title="Export & Print Document"
       >
-        <Printer size={18} />
+        <Download size={18} className="text-emerald-400" />
         <span className="text-[9px] font-bold tracking-tighter">Export</span>
       </button>
 
