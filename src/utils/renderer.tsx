@@ -101,7 +101,7 @@ export const A4Page: React.FC<A4PageProps> = ({
           {page.headerText && page.headerText.split('\n').map((lineText, idx) => (
             <h2 
               key={idx}
-              className="font-bold text-slate-950 text-center shrink-0 w-full" 
+              className="font-bold text-black text-center shrink-0 w-full" 
               style={{ 
                 fontSize: `${page.fontSize}pt`, 
                 lineHeight: 1.3, 
@@ -140,8 +140,8 @@ export const A4Page: React.FC<A4PageProps> = ({
               {/* Body block */}
               {pair.body.split('\n').map((lineText, idx) => (
                 <p 
-                  key={idx}
-                  className="text-slate-800 text-center"
+                   key={idx}
+                  className="text-black text-center"
                   style={{ 
                     fontSize: `${page.fontSize}pt`, 
                     lineHeight: 1.3, 
@@ -170,7 +170,7 @@ export const A4Page: React.FC<A4PageProps> = ({
               {pair.footer && pair.footer.split('\n').map((lineText, idx) => (
                 <p 
                   key={idx}
-                  className="font-bold text-slate-900 text-center pt-1 w-full mx-auto"
+                  className="font-bold text-black text-center pt-1 w-full mx-auto"
                   style={{ 
                     fontSize: `${page.fontSize}pt`, 
                     lineHeight: 1.3, 
@@ -368,7 +368,8 @@ export const HeaderOnlyPage: React.FC<HeaderOnlyPageProps> = ({
               lineHeight: lineSpacing,
               minHeight: `${fontSize * lineSpacing}px`,
               margin: 0, 
-              padding: 0 
+              padding: 0,
+              unicodeBidi: 'plaintext'
             }}
           >
             {lineText.trim() === '' ? '\u00A0' : lineText}

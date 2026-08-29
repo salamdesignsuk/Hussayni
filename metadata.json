@@ -1,5 +1,5 @@
 {
-  "name": "Hussayni",
+  "name": "hussayni-editor",
   "description": "HTML-first Hussayni markup compiler with layout-measurement pagination and PDF export.",
   "requestFramePermissions": [],
   "majorCapabilities": [

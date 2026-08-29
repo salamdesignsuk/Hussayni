@@ -193,7 +193,7 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
                   className="text-[14px] font-black text-emerald-400 tracking-tight leading-none block whitespace-nowrap"
                 >
                   {activePopup === 'minSize' && `${minSizeBtnValue}px`}
-                  {activePopup === 'size' && (isHeaderMode ? `${sizeBtnValue}%` : `${sizeBtnValue}px`)}
+                  {activePopup === 'size' && `${sizeBtnValue}px`}
                   {activePopup === 'spacing' && spacingBtnValue}
                   {activePopup === 'zoom' && zoomBtnValue}
                 </motion.span>

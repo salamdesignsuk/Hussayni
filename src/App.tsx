@@ -42,7 +42,6 @@ import { parseMarkup } from './utils/parser';
 import { paginateDocument } from './utils/paginator';
 import { DocumentRenderer, HeaderOnlyRenderer } from './utils/renderer';
 import { triggerSystemPrint } from './utils/pdfExport';
-import { generateOdtBlob } from './utils/odtGenerator';
 import { generateDocxBlob } from './utils/docxGenerator';
 import { exportAllHeaderImages } from './utils/imageExporter';
 import { usePwa } from './utils/usePwa';
@@ -242,7 +241,6 @@ export default function App() {
   const [showPrintToast, setShowPrintToast] = useState<boolean>(false);
   const [neverShowAgain, setNeverShowAgain] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
-  const [isGeneratingOdt, setIsGeneratingOdt] = useState<boolean>(false);
   const [isGeneratingDocx, setIsGeneratingDocx] = useState<boolean>(false);
 
   // Storage KB estimation
@@ -440,7 +438,7 @@ export default function App() {
       message: "Are you sure you want to create a new file? Current work will be backed up to your history list.",
       onConfirm: () => {
         setDocName('Poem_Name');
-        setCode(DEFAULT_MARKUP);
+        setCode('');
         setLeftFooterText('');
         setRightFooterText('');
         if (textareaRef.current) {
@@ -528,37 +526,6 @@ export default function App() {
       );
     } else {
       setShowPrintToast(true);
-    }
-  };
-
-  // Trigger browser-side ODT compilation and download
-  const handleLaunchOdt = async () => {
-    if (pages.length === 0) return;
-    setIsGeneratingOdt(true);
-    try {
-      const blob = await generateOdtBlob(
-        pages,
-        leftFooterText,
-        rightFooterText,
-        preferences.showPageNumber !== false,
-        preferences.footerFontSize || 14
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const hasTimestamp = preferences.includeExportTimestamp === true;
-      const baseName = getSanitizedDocName();
-      a.download = hasTimestamp 
-        ? `${baseName}_${getFormattedTimestamp()}.odt` 
-        : `${baseName}.odt`;
-      a.click();
-      URL.revokeObjectURL(url);
-      triggerToast("ODT file compiled successfully!");
-    } catch (e) {
-      alert("Failed to generate ODT file. Ensure all contents are formatted correctly.");
-    } finally {
-      setIsGeneratingOdt(false);
-      setShowExportModal(false);
     }
   };
 
@@ -1210,7 +1177,7 @@ export default function App() {
           <button 
             onClick={() => setShowExportModal(true)}
             className="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 p-1.5 min-[400px]:px-2.5 min-[400px]:py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1 sm:gap-1.5 shadow-md cursor-pointer shrink-0"
-            title="Export compiled document to PDF, ODT, or DOCX"
+            title="Export compiled document to PDF or DOCX"
           >
             <Download size={14} className="shrink-0" />
             <span className="font-black hidden min-[400px]:inline">Export</span>
@@ -2035,7 +2002,13 @@ export default function App() {
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between text-slate-600">
                     <span>App Engine:</span>
-                    <span className="font-bold text-slate-800">v{APP_VERSION}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setShowSettings(false); setShowAbout(true); }}
+                      className="font-bold text-emerald-600 hover:underline cursor-pointer select-text"
+                    >
+                      v{APP_VERSION}
+                    </button>
                   </div>
                   <div className="flex justify-between text-slate-600">
                     <span>Installation State:</span>
@@ -2073,16 +2046,6 @@ export default function App() {
                 )}
               </div>
 
-            </div>
-
-            {/* Drawer Footer info */}
-            <div className="p-4 border-t border-slate-200/80 bg-white flex items-center justify-end text-[10px] text-slate-400 shrink-0">
-              <button 
-                onClick={() => { setShowSettings(false); setShowAbout(true); }}
-                className="text-emerald-600 font-bold hover:underline cursor-pointer"
-              >
-                View App About
-              </button>
             </div>
           </motion.div>
         </motion.div>

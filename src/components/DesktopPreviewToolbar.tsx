@@ -288,7 +288,7 @@ export const DesktopPreviewToolbar: React.FC<DesktopPreviewToolbarProps> = ({
             {sizeBtnValue}
           </span>
         </button>
-        {renderVerticalAdjuster('size', () => handleSizeChange(1), () => handleSizeChange(-1), isHeaderMode ? `${sizeBtnValue}%` : `${sizeBtnValue}px`)}
+        {renderVerticalAdjuster('size', () => handleSizeChange(1), () => handleSizeChange(-1), `${sizeBtnValue}px`)}
       </div>
 
       {/* 4. SPACING BUTTON */}

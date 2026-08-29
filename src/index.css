@@ -179,6 +179,22 @@ html, body {
     background-color: #ffffff !important;
     color: #000000 !important;
   }
+
+  /* Make all content blocks in typeset A4 pages solid pure black (#000000) during PDF export/printing */
+  .printable-area h2,
+  .printable-area p,
+  .printable-area span {
+    color: #000000 !important;
+    text-shadow: none !important;
+  }
+
+  /* Restore page running footer color and border to slate gray during printing */
+  .page-footer,
+  .page-footer * {
+    color: #64748b !important;
+    border-color: #e2e8f0 !important;
+    text-shadow: none !important;
+  }
 }
 
 /* Screen preview styling for .page and .printable-area - kept in exact 1:1 parity with print */
@@ -204,3 +220,5 @@ html, body {
   justify-content: space-between;
   direction: rtl;
 }
+
+

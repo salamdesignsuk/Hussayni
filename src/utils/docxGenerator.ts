@@ -77,7 +77,7 @@ export async function generateDocxBlob(
                 bold: false,
                 size: fontSizeHalfPoints,
                 font: "Arial",
-                color: "1e293b",
+                color: "000000",
               }),
             ],
           })
@@ -102,7 +102,7 @@ export async function generateDocxBlob(
                   bold: true,
                   size: fontSizeHalfPoints,
                   font: "Arial",
-                  color: "0f172a",
+                  color: "000000",
                 }),
               ],
             })
