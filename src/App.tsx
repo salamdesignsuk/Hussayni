@@ -11,7 +11,6 @@ import {
   Info, 
   ZoomIn, 
   ZoomOut,
-  Sparkles,
   ExternalLink,
   Loader2,
   Settings as SettingsIcon,
@@ -85,7 +84,6 @@ F = سورة الفلق`;
 export default function App() {
   // PWA & Connection Manager Hook
   const pwa = usePwa();
-  const [dismissedUpdate, setDismissedUpdate] = useState(false);
 
   // Document & Code States
   const [code, setCode] = useState<string>(() => {
@@ -703,6 +701,15 @@ export default function App() {
     setTimeout(() => setToastMessage(''), 3000);
   };
 
+  // If the app just auto-applied a service worker update (see usePwa.ts), confirm it with a toast.
+  useEffect(() => {
+    if (sessionStorage.getItem('hussayni_just_updated')) {
+      sessionStorage.removeItem('hussayni_just_updated');
+      triggerToast(`Updated to version ${APP_VERSION}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Create a brand new file
   const handleNew = () => {
     setConfirmConfig({
@@ -913,6 +920,8 @@ export default function App() {
     const backupData = {
       preferences,
       recentDocs,
+      savedPoems,
+      deletedPoems,
       activeDocName: docName,
       activeDocMarkup: code,
       activeLeftFooter: leftFooterText,
@@ -927,7 +936,7 @@ export default function App() {
     a.download = `hussayni_settings_backup_${getFormattedTimestamp()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    triggerToast("Settings exported!");
+    triggerToast("Settings & Library exported!");
   };
 
   // Import Application Settings file (.json)
@@ -950,6 +959,14 @@ export default function App() {
           setRecentDocs(parsed.recentDocs);
           localStorage.setItem('hussayni_recent_docs', JSON.stringify(parsed.recentDocs));
         }
+        if (parsed.savedPoems) {
+          setSavedPoems(parsed.savedPoems);
+          localStorage.setItem('hussayni_saved_poems', JSON.stringify(parsed.savedPoems));
+        }
+        if (parsed.deletedPoems) {
+          setDeletedPoems(parsed.deletedPoems);
+          localStorage.setItem('hussayni_deleted_poems', JSON.stringify(parsed.deletedPoems));
+        }
         if (parsed.activeDocMarkup) {
           setCode(parsed.activeDocMarkup);
         }
@@ -962,7 +979,7 @@ export default function App() {
         if (parsed.activeRightFooter !== undefined) {
           setRightFooterText(parsed.activeRightFooter);
         }
-        triggerToast("Backup profiles imported successfully!");
+        triggerToast("Settings & Library imported successfully!");
         setShowSettings(false);
       } catch (err) {
         alert("Invalid backup configuration file. Please ensure it is a valid Hussayni settings backup JSON.");
@@ -1102,38 +1119,8 @@ export default function App() {
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".txt" className="hidden" />
       <input type="file" ref={settingsInputRef} onChange={handleImportPreferencesChange} accept=".json" className="hidden" />
 
-      {/* SERVICE WORKER PWA UPDATE BANNER */}
-      {pwa.needRefresh && !dismissedUpdate && (
-        <div className="bg-emerald-700 text-white px-4 sm:px-6 h-[calc(3.5rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)] flex items-center justify-between shadow-md z-[99999] select-none shrink-0 border-b border-white/10 animate-fade-in print:hidden">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <Sparkles className="text-emerald-300 animate-pulse shrink-0" size={16} />
-            <span className="text-xs sm:text-sm font-bold tracking-wide truncate">
-              New version available!
-            </span>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <button
-              onClick={() => pwa.updateServiceWorker(true)}
-              className="bg-white text-emerald-800 hover:bg-emerald-50 px-3 py-1 rounded-lg text-xs font-black transition-all duration-150 shadow-xs cursor-pointer h-8 flex items-center"
-            >
-              Update
-            </button>
-            <button
-              onClick={() => { 
-                setDismissedUpdate(true); 
-                triggerToast("Update delayed. Will apply next time you open the app."); 
-                pwa.updateServiceWorker(false);
-              }}
-              className="text-white/80 hover:text-white px-2.5 py-1 rounded-lg text-xs font-semibold hover:bg-white/10 transition-all cursor-pointer h-8 flex items-center"
-            >
-              Later
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* HEADER CONTROLS */}
-      <header className={`${pwa.needRefresh && !dismissedUpdate ? 'h-14 pt-0' : 'h-[calc(3.5rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)]'} ${themeClasses.headerBg} flex items-center justify-between px-2 sm:px-6 shadow-md shrink-0 select-none print:hidden z-30 relative`}>
+      <header className={`h-[calc(3.5rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)] ${themeClasses.headerBg} flex items-center justify-between px-2 sm:px-6 shadow-md shrink-0 select-none print:hidden z-30 relative`}>
         <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1 mr-4">
           
           {/* Logo Button spacer - the actual icon is <AppIconButton>, a single persistent
@@ -2201,10 +2188,8 @@ export default function App() {
               <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-2.5 select-none text-[11px] text-slate-500">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                   <p className="font-extrabold text-xs text-slate-800">APP STATUS & UPDATES</p>
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                    pwa.needRefresh ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                  }`}>
-                    {pwa.needRefresh ? 'Update Pending' : 'Up to Date'}
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    Up to Date
                   </span>
                 </div>
                 
@@ -2232,17 +2217,6 @@ export default function App() {
                     </span>
                   </div>
                 </div>
-
-                {/* Show Update button ONLY when an update is available */}
-                {pwa.needRefresh && (
-                  <button
-                    onClick={() => pwa.updateServiceWorker(true)}
-                    className="w-full mt-2 bg-amber-500 hover:bg-amber-400 text-slate-900 text-xs font-black py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-md animate-bounce"
-                  >
-                    <Sparkles size={14} />
-                    <span>Update Available – Click to Reload</span>
-                  </button>
-                )}
 
                 {pwa.isInstallable && (
                   <button

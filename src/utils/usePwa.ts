@@ -27,6 +27,10 @@ export function usePwa(): UsePwaResult {
       const update = registerSW({
         onNeedRefresh() {
           setNeedRefresh(true);
+          // Apply the update automatically instead of waiting for the user to click a banner -
+          // the app confirms it happened with a toast (App.tsx) after the reload below completes.
+          sessionStorage.setItem('hussayni_just_updated', '1');
+          update(true);
         },
         onOfflineReady() {
           setOfflineReady(true);
