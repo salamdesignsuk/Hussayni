@@ -2,6 +2,7 @@ import React from 'react';
 import { Download } from 'lucide-react';
 import { ParsedPage } from './documentModel';
 import { exportSingleHeaderImage } from './imageExporter';
+import { formatNumeral } from './numerals';
 
 interface A4PageProps {
   page: ParsedPage;
@@ -11,21 +12,28 @@ interface A4PageProps {
   rightFooterText?: string;
   showPageNumber?: boolean;
   footerFontSize?: number;
+  useArabicNumerals?: boolean;
+  paragraphSpacing?: number;
 }
 
 /**
  * A standard A4 Portrait Page component.
  * Uses exact CSS dimensions and layout properties to ensure perfect rendering parity.
  */
-export const A4Page: React.FC<A4PageProps> = ({ 
-  page, 
-  totalPages, 
-  showDebug = false, 
-  leftFooterText = '', 
+export const A4Page: React.FC<A4PageProps> = ({
+  page,
+  totalPages,
+  showDebug = false,
+  leftFooterText = '',
   rightFooterText = '',
   showPageNumber = true,
-  footerFontSize = 14
+  footerFontSize = 14,
+  useArabicNumerals = false,
+  paragraphSpacing = 1.0
 }) => {
+  // Paragraph spacing is the line-height of the body text only (header/footer
+  // and the blank-line gaps are unaffected), matching paginator.ts's measurement.
+  const bodyLineHeight = 1.3 * paragraphSpacing;
   const [debugInfo, setDebugInfo] = React.useState({
     remainingHeightMm: 0,
     hasHorizontalOverflow: false,
@@ -129,7 +137,7 @@ export const A4Page: React.FC<A4PageProps> = ({
             <div key={pair.id} className="flex flex-col">
               {/* Space between previous footer and next body if multiple on same page */}
               {pairIdx > 0 && (
-                <p 
+                <p
                   className="select-none text-center"
                   style={{ fontSize: `${page.lineBreakSize}pt`, lineHeight: 1.3, margin: 0, padding: 0 }}
                 >
@@ -137,17 +145,17 @@ export const A4Page: React.FC<A4PageProps> = ({
                 </p>
               )}
 
-              {/* Body block */}
+              {/* Body block - line-height scales with paragraph spacing */}
               {pair.body.split('\n').map((lineText, idx) => (
-                <p 
+                <p
                    key={idx}
                   className="text-black text-center"
-                  style={{ 
-                    fontSize: `${page.fontSize}pt`, 
-                    lineHeight: 1.3, 
-                    fontWeight: 'normal', 
-                    margin: 0, 
-                    padding: 0 
+                  style={{
+                    fontSize: `${page.fontSize}pt`,
+                    lineHeight: bodyLineHeight,
+                    fontWeight: 'normal',
+                    margin: 0,
+                    padding: 0
                   }}
                 >
                   <span className="hussayni-line-span-render" style={{ display: 'inline-block', whiteSpace: 'nowrap' }}>
@@ -155,10 +163,10 @@ export const A4Page: React.FC<A4PageProps> = ({
                   </span>
                 </p>
               ))}
-              
+
               {/* 1 physical blank line between each body and footer */}
               {pair.footer && (
-                <p 
+                <p
                   className="select-none text-center"
                   style={{ fontSize: `${page.lineBreakSize}pt`, lineHeight: 1.3, margin: 0, padding: 0 }}
                 >
@@ -198,12 +206,12 @@ export const A4Page: React.FC<A4PageProps> = ({
 
           {/* Center Page Numbers */}
           <div className="text-center tracking-wider font-semibold">
-            {showPageNumber ? `${page.pageNumber} من ${totalPages}` : '\u00a0'}
+            {showPageNumber ? `${formatNumeral(page.pageNumber, useArabicNumerals)} من ${formatNumeral(totalPages, useArabicNumerals)}` :'\u00a0'}
           </div>
 
           {/* Left Side Footer Text (placed leftmost in RTL direction) */}
           <div className="font-medium text-left max-w-[35%] truncate" dir="rtl" title={leftFooterText}>
-            {leftFooterText || '\u00a0'}
+            {leftFooterText ? formatNumeral(leftFooterText, useArabicNumerals) :'\u00a0'}
           </div>
         </div>
       </div>
@@ -239,19 +247,23 @@ interface DocumentRendererProps {
   rightFooterText?: string;
   showPageNumber?: boolean;
   footerFontSize?: number;
+  useArabicNumerals?: boolean;
+  paragraphSpacing?: number;
 }
 
 /**
  * Renders the full list of A4 pages for the interactive preview or print view.
  */
-export const DocumentRenderer: React.FC<DocumentRendererProps> = ({ 
-  pages, 
-  zoom, 
-  showDebug = false, 
-  leftFooterText = '', 
+export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
+  pages,
+  zoom,
+  showDebug = false,
+  leftFooterText = '',
   rightFooterText = '',
   showPageNumber = true,
-  footerFontSize = 14
+  footerFontSize = 14,
+  useArabicNumerals = false,
+  paragraphSpacing = 1.0
 }) => {
   return (
     <div 
@@ -277,6 +289,8 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
           rightFooterText={rightFooterText}
           showPageNumber={showPageNumber}
           footerFontSize={footerFontSize}
+          useArabicNumerals={useArabicNumerals}
+          paragraphSpacing={paragraphSpacing}
         />
       ))}
     </div>
@@ -397,7 +411,7 @@ export const HeaderOnlyRenderer: React.FC<HeaderOnlyRendererProps> = ({
   theme = 'dark',
   docName = 'Header_Slide'
 }) => {
-  const displayHeaders = headers.length > 0 ? headers : ['عنوان القصيدة'];
+  const displayHeaders = headers;
   const baseScale = 0.42;
   const effectiveScale = baseScale * (zoom / 100);
 

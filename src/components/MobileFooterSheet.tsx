@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence, useDragControls } from 'motion/react';
 import { UserPreferences } from '../utils/documentModel';
+import { formatNumeral } from '../utils/numerals';
 
 interface MobileFooterSheetProps {
   isOpen: boolean;
@@ -280,10 +281,10 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                           <button
                             type="button"
                             onClick={() => handleApplyPresetMonthYear(selectedMonth, '1447')}
-                            className="text-[11px] sm:text-xs font-extrabold text-emerald-400 hover:text-emerald-300 active:scale-95 text-center flex-1 truncate transition-all cursor-pointer"
-                            title="Reset to current year (1447 AH)"
+                            className={`${preferences?.useArabicNumerals ? 'text-sm sm:text-base' : 'text-[11px] sm:text-xs'} font-extrabold text-emerald-400 hover:text-emerald-300 active:scale-95 text-center flex-1 truncate transition-all cursor-pointer`}
+                            title="Reset to current year (1447)"
                           >
-                            {selectedYear} AH
+                            {formatNumeral(selectedYear, preferences?.useArabicNumerals)}
                           </button>
 
                           <button
@@ -321,9 +322,9 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
 
                         {/* Custom Text Input */}
                         <div className="relative">
-                          <input 
+                          <input
                             type="text"
-                            value={customLeftText}
+                            value={formatNumeral(customLeftText, preferences?.useArabicNumerals)}
                             onChange={(e) => {
                               setCustomLeftText(e.target.value);
                               setLeftFooterText(e.target.value);
@@ -431,7 +432,7 @@ export const MobileFooterSheet: React.FC<MobileFooterSheetProps> = ({
                 <div className={`${sheetTheme.cardBg} rounded-2xl p-3 select-none col-span-1 h-[56px] flex items-center justify-between`}>
                   <div className="flex items-center gap-1.5 min-w-0">
                     <Type size={14} className="text-emerald-400 shrink-0" />
-                    <span className="font-bold text-xs sm:text-sm truncate">Size</span>
+                    <span className="font-bold text-xs sm:text-sm truncate">Footer</span>
                   </div>
                   <div className={`flex items-center ${sheetTheme.controlBg} rounded-lg h-7 overflow-hidden select-none shrink-0`}>
                     <button

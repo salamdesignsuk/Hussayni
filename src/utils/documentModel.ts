@@ -38,7 +38,7 @@ export interface UserPreferences {
   language?: 'en' | 'ar';
   minFontSize: number;
   maxFontSize: number;
-  paragraphSpacing: 'compact' | 'normal' | 'relaxed';
+  paragraphSpacing: number; // multiplier, 0.7x - 2.5x (like headerLineSpacing)
   showLineNumbers: boolean;
   editorFontSize: number;
   editorRtl: boolean;
@@ -54,6 +54,7 @@ export interface UserPreferences {
   headerLineSpacing?: number;
   headerTheme?: 'dark' | 'light';
   showCompilationLog?: boolean;
+  useArabicNumerals?: boolean;
 }
 
 export interface RecentDocument {
@@ -65,12 +66,19 @@ export interface RecentDocument {
   rightFooter?: string;
 }
 
+// A poem moved to the Library's Recently Deleted bin. Kept for 30 days
+// (see the purge effect in App.tsx) before being permanently removed.
+export interface DeletedDocument extends RecentDocument {
+  deletedAt: string; // ISO string
+  sourceList: 'saved' | 'unsaved';
+}
+
 export const DEFAULT_PREFERENCES: UserPreferences = {
   theme: 'slate',
   language: 'en',
   minFontSize: 16,
   maxFontSize: 32,
-  paragraphSpacing: 'normal',
+  paragraphSpacing: 1.0,
   showLineNumbers: true,
   editorFontSize: 13,
   editorRtl: true,
@@ -85,5 +93,6 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   headerFontSize: 145,
   headerLineSpacing: 1.2,
   headerTheme: 'dark',
-  showCompilationLog: true
+  showCompilationLog: true,
+  useArabicNumerals: false
 };

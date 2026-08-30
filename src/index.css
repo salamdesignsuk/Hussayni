@@ -78,7 +78,7 @@ html, body {
   }
 
   /* Hide all interactive UI elements during printing */
-  body > div:not(#root), 
+  body > div:not(#root),
   header,
   section:first-of-type, /* Editor section */
   .print\:hidden,
@@ -87,6 +87,13 @@ html, body {
   aside,
   button,
   div[class*="bg-slate-900"] {
+    display: none !important;
+  }
+
+  /* The Library's read-only poem preview renders outside <main>, so printing from
+     it needs the normal app shell hidden explicitly - it isn't covered by the
+     `main` reset/hide rules above. */
+  body.hussayni-library-print main {
     display: none !important;
   }
 

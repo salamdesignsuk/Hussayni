@@ -77,6 +77,22 @@ export function parseMarkup(code: string): {
   let activeBody: string | null = null;
   let activeBodyLine = -1;
 
+  // Pushes a body-footer pair, warning (once per pair, like the empty-body/
+  // empty-footer checks below) if no header is currently active for it.
+  const pushPair = (id: string, body: string, bodyLineIndex: number, footer: string, footerLineIndex: number) => {
+    if (currentHeader === '') {
+      errors.push({
+        line: bodyLineIndex,
+        message: 'Header is missing for this section.',
+        severity: 'warning'
+      });
+    }
+    documentItems.push({
+      type: 'pair',
+      data: { id, body, bodyLineIndex, footer, footerLineIndex, activeHeader: currentHeader }
+    });
+  };
+
   tokens.forEach((token) => {
     if (token.type === 'H') {
       if (token.text === '') {
@@ -102,17 +118,7 @@ export function parseMarkup(code: string): {
           severity: 'error'
         });
         // Push the previous un-footered body anyway to preview it
-        documentItems.push({
-          type: 'pair',
-          data: {
-            id: `pair-${token.lineIndex}-unfootered`,
-            body: activeBody,
-            bodyLineIndex: activeBodyLine,
-            footer: '',
-            footerLineIndex: -1,
-            activeHeader: currentHeader
-          }
-        });
+        pushPair(`pair-${token.lineIndex}-unfootered`, activeBody, activeBodyLine, '', -1);
       }
       activeBody = token.text;
       activeBodyLine = token.lineIndex;
@@ -131,17 +137,7 @@ export function parseMarkup(code: string): {
           severity: 'error'
         });
       } else {
-        documentItems.push({
-          type: 'pair',
-          data: {
-            id: `pair-${activeBodyLine}`,
-            body: activeBody,
-            bodyLineIndex: activeBodyLine,
-            footer: token.text,
-            footerLineIndex: token.lineIndex,
-            activeHeader: currentHeader
-          }
-        });
+        pushPair(`pair-${activeBodyLine}`, activeBody, activeBodyLine, token.text, token.lineIndex);
         activeBody = null;
         activeBodyLine = -1;
       }
@@ -152,17 +148,7 @@ export function parseMarkup(code: string): {
           message: "Body without footer before manual page break.",
           severity: 'error'
         });
-        documentItems.push({
-          type: 'pair',
-          data: {
-            id: `pair-${activeBodyLine}-break-unfootered`,
-            body: activeBody,
-            bodyLineIndex: activeBodyLine,
-            footer: '',
-            footerLineIndex: -1,
-            activeHeader: currentHeader
-          }
-        });
+        pushPair(`pair-${activeBodyLine}-break-unfootered`, activeBody, activeBodyLine, '', -1);
         activeBody = null;
         activeBodyLine = -1;
       }
@@ -177,27 +163,7 @@ export function parseMarkup(code: string): {
       message: "Body without footer at the end of the document.",
       severity: 'error'
     });
-    documentItems.push({
-      type: 'pair',
-      data: {
-        id: `pair-${activeBodyLine}-eof-unfootered`,
-        body: activeBody,
-        bodyLineIndex: activeBodyLine,
-        footer: '',
-        footerLineIndex: -1,
-        activeHeader: currentHeader
-      }
-    });
-  }
-
-  // Check if any headers exist
-  const headersCount = tokens.filter(t => t.type === 'H').length;
-  if (headersCount === 0 && documentItems.some(i => i.type === 'pair')) {
-    errors.push({
-      line: 1,
-      message: "Missing header: No 'H' tag has been defined in the document.",
-      severity: 'warning'
-    });
+    pushPair(`pair-${activeBodyLine}-eof-unfootered`, activeBody, activeBodyLine, '', -1);
   }
 
   return { tokens, errors, documentItems };

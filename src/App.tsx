@@ -20,7 +20,6 @@ import {
   Upload,
   Wifi,
   WifiOff,
-  History,
   Check,
   FileText,
   HelpCircle,
@@ -45,18 +44,24 @@ import { triggerSystemPrint } from './utils/pdfExport';
 import { generateDocxBlob } from './utils/docxGenerator';
 import { exportAllHeaderImages } from './utils/imageExporter';
 import { usePwa } from './utils/usePwa';
-import { 
-  ParsedPage, 
-  ValidationError, 
-  UserPreferences, 
+import {
+  ParsedPage,
+  ValidationError,
+  UserPreferences,
   DEFAULT_PREFERENCES,
-  RecentDocument
+  RecentDocument,
+  DeletedDocument
 } from './utils/documentModel';
 import { MobileFooterSheet } from './components/MobileFooterSheet';
 import { MobileBottomToolbar } from './components/MobileBottomToolbar';
 import { MobilePreviewToolbar, ActivePopup } from './components/MobilePreviewToolbar';
 import { DesktopPreviewToolbar } from './components/DesktopPreviewToolbar';
 import { DesktopEditorToolbar } from './components/DesktopEditorToolbar';
+import { LibraryScreen } from './components/LibraryScreen';
+import { AppIconButton } from './components/AppIconButton';
+import { PoemPreviewScreen } from './components/PoemPreviewScreen';
+import { SaveToLibraryDialog } from './components/SaveToLibraryDialog';
+import { RenamePoemDialog } from './components/RenamePoemDialog';
 
 // Injected globals from Vite define, with safe development fallbacks
 const APP_VERSION = '2.0.0';
@@ -101,11 +106,31 @@ export default function App() {
     return localStorage.getItem('hussayni_right_footer') || '';
   });
 
-  // Recent Documents List
+  // Recent Documents List (Library "Unsaved" tab)
   const [recentDocs, setRecentDocs] = useState<RecentDocument[]>(() => {
     const saved = localStorage.getItem('hussayni_recent_docs');
     return saved ? JSON.parse(saved) : [];
   });
+
+  // Explicitly saved poems (Library "Saved" tab)
+  const [savedPoems, setSavedPoems] = useState<RecentDocument[]>(() => {
+    const saved = localStorage.getItem('hussayni_saved_poems');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Recently Deleted bin (Library "Deleted" tab) - purged after 30 days, see effect below
+  const [deletedPoems, setDeletedPoems] = useState<DeletedDocument[]>(() => {
+    const saved = localStorage.getItem('hussayni_deleted_poems');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [showLibrary, setShowLibrary] = useState<boolean>(false);
+  const [previewDoc, setPreviewDoc] = useState<RecentDocument | null>(null);
+  const [previewPages, setPreviewPages] = useState<ParsedPage[]>([]);
+  const [pendingPdfExport, setPendingPdfExport] = useState<boolean>(false);
+  const [showSaveToLibraryDialog, setShowSaveToLibraryDialog] = useState<boolean>(false);
+  const [libraryIconGlow, setLibraryIconGlow] = useState<'none' | 'orange'>('none');
+  const [renameTarget, setRenameTarget] = useState<{ doc: RecentDocument; list: 'saved' | 'unsaved' } | null>(null);
 
   // User Preferences State
   const [preferences, setPreferences] = useState<UserPreferences>(() => {
@@ -174,12 +199,15 @@ export default function App() {
   const [showMobileFooterSheet, setShowMobileFooterSheet] = useState<boolean>(false);
 
   useEffect(() => {
-    // Cross-fade launch title after exactly 2 seconds
+    // Show the splash title - on first load, and again whenever returning to
+    // the editor from the Library - then cross-fade to the filename after 2s.
+    if (showLibrary) return undefined;
+    setIsSplashTitle(true);
     const timer = setTimeout(() => {
       setIsSplashTitle(false);
     }, 2000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [showLibrary]);
 
   // Layout and compiled pages
   const [pages, setPages] = useState<ParsedPage[]>([]);
@@ -228,7 +256,6 @@ export default function App() {
   const [showAbout, setShowAbout] = useState<boolean>(false);
   const [showExportModal, setShowExportModal] = useState<boolean>(false);
   const [showHowToUse, setShowHowToUse] = useState<boolean>(false);
-  const [showRecentMenu, setShowRecentMenu] = useState<boolean>(false);
   const [showFileMenu, setShowFileMenu] = useState<boolean>(false);
   const [isLogCollapsed, setIsLogCollapsed] = useState<boolean>(() => {
     return typeof window !== 'undefined' && window.innerWidth < 1024;
@@ -288,8 +315,47 @@ export default function App() {
       .filter(t => t.type === 'H')
       .map(t => t.text.trim())
       .filter(Boolean);
-    return list.length > 0 ? list : [docName || 'عنوان القصيدة'];
+    return list.length > 0 ? list : (docName ? [docName] : []);
   }, [code, docName]);
+
+  // Close the mobile File menu when tapping/clicking anywhere outside it
+  useEffect(() => {
+    if (!showFileMenu) return undefined;
+    const handleOutsidePointer = (e: PointerEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.mobile-file-menu-wrapper')) {
+        setShowFileMenu(false);
+      }
+    };
+    document.addEventListener('pointerdown', handleOutsidePointer);
+    return () => document.removeEventListener('pointerdown', handleOutsidePointer);
+  }, [showFileMenu]);
+
+  // Purge Recently Deleted poems older than 30 days, once on load
+  useEffect(() => {
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    setDeletedPoems(prev => {
+      const kept = prev.filter(d => now - new Date(d.deletedAt).getTime() < THIRTY_DAYS_MS);
+      if (kept.length !== prev.length) {
+        localStorage.setItem('hussayni_deleted_poems', JSON.stringify(kept));
+      }
+      return kept;
+    });
+  }, []);
+
+  // Open the Library: hide the background scrollbar immediately (so its
+  // removal doesn't visibly jump mid-animation), then let the transition
+  // play on the next frame. Restoring the scrollbar on close is handled by
+  // the AnimatePresence onExitComplete callback, once the close transition
+  // has fully finished - see the Library render block.
+  const handleOpenLibrary = () => {
+    document.body.style.overflow = 'hidden';
+    // Clears any lingering orange save-glow (fading it away via the button's own
+    // transition-shadow) rather than showing a glow of its own.
+    setLibraryIconGlow('none');
+    requestAnimationFrame(() => setShowLibrary(true));
+  };
 
   // Asynchronous Pagination triggered by content or preference updates
   useEffect(() => {
@@ -318,6 +384,41 @@ export default function App() {
       active = false;
     };
   }, [code, preferences.minFontSize, preferences.maxFontSize, preferences.paragraphSpacing]);
+
+  // Paginate whichever Library poem is currently open in the read-only preview
+  useEffect(() => {
+    if (!previewDoc) {
+      setPreviewPages([]);
+      return;
+    }
+    let active = true;
+
+    (async () => {
+      const parsed = parseMarkup(previewDoc.markup);
+      const { pages: solvedPages } = await paginateDocument(parsed.documentItems, preferences);
+      if (active) setPreviewPages(solvedPages);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [previewDoc, preferences.minFontSize, preferences.maxFontSize, preferences.paragraphSpacing]);
+
+  // When PDF export is triggered from the Library list (not the preview screen itself),
+  // wait for the newly-opened preview's pagination to finish before printing it.
+  useEffect(() => {
+    if (pendingPdfExport && previewDoc && previewPages.length > 0) {
+      setPendingPdfExport(false);
+      const originalTitle = document.title;
+      document.title = previewDoc.name.replace(/\s+/g, '_');
+      setTimeout(() => {
+        triggerSystemPrint(
+          () => {},
+          () => { document.title = originalTitle; }
+        );
+      }, 150);
+    }
+  }, [pendingPdfExport, previewDoc, previewPages]);
 
   // Track modifications for save status
   useEffect(() => {
@@ -400,29 +501,200 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [code, docName, leftFooterText, rightFooterText]);
 
-  // Load a document from recent documents
-  const handleLoadRecent = (doc: RecentDocument) => {
+  // Open a Library (Saved or Unsaved) poem in the main editor
+  const handleOpenLibraryDocInEditor = (doc: RecentDocument) => {
     setConfirmConfig({
-      title: "Load Recent Document?",
-      message: `Are you sure you want to open "${doc.name}"? Current modifications will be automatically saved in history.`,
+      title: "Open in Editor?",
+      message: `Your current unsaved work will be automatically saved to history.\nOpen "${doc.name}" in the editor?`,
       onConfirm: () => {
         setDocName(doc.name);
         setCode(doc.markup);
         setLeftFooterText(doc.leftFooter || '');
         setRightFooterText(doc.rightFooter || '');
-        setShowRecentMenu(false);
+        setShowLibrary(false);
+        setPreviewDoc(null);
         triggerToast(`Opened "${doc.name}" successfully`);
       }
     });
   };
 
-  // Delete a document from recent documents list
-  const handleDeleteRecent = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const filtered = recentDocs.filter(d => d.id !== id);
-    setRecentDocs(filtered);
-    localStorage.setItem('hussayni_recent_docs', JSON.stringify(filtered));
-    triggerToast('Removed document from history');
+  // Move a poem from either the Saved or Unsaved Library list into the
+  // Recently Deleted bin (confirmed first - deletion is never immediate).
+  const handleDeleteLibraryDoc = (doc: RecentDocument, list: 'saved' | 'unsaved') => {
+    setConfirmConfig({
+      title: "Delete poem?",
+      message: `It stays there for 30 days before being permanently removed.\nMove "${doc.name}" to Recently Deleted?`,
+      onConfirm: () => {
+        if (list === 'saved') {
+          const filtered = savedPoems.filter(d => d.id !== doc.id);
+          setSavedPoems(filtered);
+          localStorage.setItem('hussayni_saved_poems', JSON.stringify(filtered));
+        } else {
+          const filtered = recentDocs.filter(d => d.id !== doc.id);
+          setRecentDocs(filtered);
+          localStorage.setItem('hussayni_recent_docs', JSON.stringify(filtered));
+        }
+
+        setDeletedPoems(prev => {
+          const updated: DeletedDocument[] = [
+            { ...doc, deletedAt: new Date().toISOString(), sourceList: list },
+            ...prev
+          ];
+          localStorage.setItem('hussayni_deleted_poems', JSON.stringify(updated));
+          return updated;
+        });
+
+        if (previewDoc?.id === doc.id) setPreviewDoc(null);
+        triggerToast(`"${doc.name}" moved to Recently Deleted`);
+      }
+    });
+  };
+
+  // Restore a poem from the Recently Deleted bin back to its original list
+  const handleRestoreDeletedDoc = (doc: DeletedDocument) => {
+    const { deletedAt, sourceList, ...restored } = doc;
+    if (sourceList === 'saved') {
+      setSavedPoems(prev => {
+        const updated = [restored, ...prev];
+        localStorage.setItem('hussayni_saved_poems', JSON.stringify(updated));
+        return updated;
+      });
+    } else {
+      setRecentDocs(prev => {
+        const updated = [restored, ...prev];
+        localStorage.setItem('hussayni_recent_docs', JSON.stringify(updated));
+        return updated;
+      });
+    }
+    setDeletedPoems(prev => {
+      const filtered = prev.filter(d => d.id !== doc.id);
+      localStorage.setItem('hussayni_deleted_poems', JSON.stringify(filtered));
+      return filtered;
+    });
+    triggerToast(`"${doc.name}" restored`);
+  };
+
+  // Permanently remove a poem from the Recently Deleted bin (confirmed - irreversible)
+  const handlePermanentlyDeleteDoc = (doc: DeletedDocument) => {
+    setConfirmConfig({
+      title: "Delete forever?",
+      message: `This cannot be undone.\nPermanently delete "${doc.name}"?`,
+      onConfirm: () => {
+        setDeletedPoems(prev => {
+          const filtered = prev.filter(d => d.id !== doc.id);
+          localStorage.setItem('hussayni_deleted_poems', JSON.stringify(filtered));
+          return filtered;
+        });
+        triggerToast(`"${doc.name}" permanently deleted`);
+      }
+    });
+  };
+
+  // Update a Saved/Unsaved poem's name, poet name, and date without opening it in the editor
+  const handleRenamePoem = (newName: string, newPoet: string, newDate: string) => {
+    if (!renameTarget) return;
+    const { doc, list } = renameTarget;
+    const applyRename = (items: RecentDocument[]) =>
+      items.map(d => d.id === doc.id
+        ? { ...d, name: newName.trim() || d.name, rightFooter: newPoet, leftFooter: newDate }
+        : d
+      );
+
+    if (list === 'saved') {
+      setSavedPoems(prev => {
+        const updated = applyRename(prev);
+        localStorage.setItem('hussayni_saved_poems', JSON.stringify(updated));
+        return updated;
+      });
+    } else {
+      setRecentDocs(prev => {
+        const updated = applyRename(prev);
+        localStorage.setItem('hussayni_recent_docs', JSON.stringify(updated));
+        return updated;
+      });
+    }
+    setRenameTarget(null);
+    triggerToast(`"${newName.trim() || doc.name}" updated`);
+  };
+
+  // Open the read-only HTML preview for a Library poem
+  const handleOpenLibraryPreview = (doc: RecentDocument) => {
+    setPreviewDoc(doc);
+  };
+
+  // Persist the current draft into the Library's "Saved" tab (upsert by name).
+  // Validation (poem name / poet name / date) is handled by the Save to Library
+  // dialog itself - this just performs the save, used by both its "Save" (after
+  // validation passes) and "Save as Draft" (no validation) actions.
+  const saveCurrentDraftToLibrary = () => {
+    const name = (docName || '').trim() || 'Untitled';
+
+    setSavedPoems(prev => {
+      const existingIdx = prev.findIndex(p => p.name === name);
+      const entry: RecentDocument = {
+        id: existingIdx >= 0 ? prev[existingIdx].id : `saved-${Date.now()}`,
+        name,
+        markup: code,
+        leftFooter: leftFooterText,
+        rightFooter: rightFooterText,
+        lastSaved: new Date().toISOString()
+      };
+      const updated = existingIdx >= 0
+        ? prev.map((p, i) => i === existingIdx ? entry : p)
+        : [entry, ...prev];
+
+      localStorage.setItem('hussayni_saved_poems', JSON.stringify(updated));
+      return updated;
+    });
+    setShowSaveToLibraryDialog(false);
+    triggerToast(`"${name}" saved to Library`);
+    // Stays lit until the app icon is actually pressed (handleOpenLibrary clears it back to
+    // 'none', fading the glow away smoothly rather than cutting it off abruptly).
+    setLibraryIconGlow('orange');
+  };
+
+  // Export an arbitrary Library poem (not necessarily the one open in the editor) as DOCX
+  const handleExportLibraryDocx = async (doc: RecentDocument) => {
+    try {
+      const parsed = parseMarkup(doc.markup);
+      const { pages: solvedPages } = await paginateDocument(parsed.documentItems, preferences);
+      const blob = await generateDocxBlob(
+        solvedPages,
+        doc.leftFooter || '',
+        doc.rightFooter || '',
+        preferences.showPageNumber !== false,
+        preferences.footerFontSize || 14
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${doc.name.replace(/\s+/g, '_')}.docx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      triggerToast(`"${doc.name}" exported as Word document`);
+    } catch (e) {
+      alert('Failed to generate DOCX file. Ensure the poem is formatted correctly.');
+    }
+  };
+
+  // Print/PDF-export whichever poem is currently open in the Library preview screen
+  const handleExportPreviewPdf = () => {
+    if (!previewDoc) return;
+    const originalTitle = document.title;
+    document.title = previewDoc.name.replace(/\s+/g, '_');
+    triggerSystemPrint(
+      () => {},
+      () => { document.title = originalTitle; }
+    );
+  };
+
+  // PDF export triggered from the Library list's "more" menu, without the user
+  // manually opening the preview first. Printing needs the poem actually
+  // rendered on-screen, so this opens the preview and waits for its pagination
+  // to finish before triggering print (see the pendingPdfExport effect below).
+  const handleExportLibraryPdf = (doc: RecentDocument) => {
+    setPreviewDoc(doc);
+    setPendingPdfExport(true);
   };
 
   // Toast message trigger helper
@@ -435,7 +707,7 @@ export default function App() {
   const handleNew = () => {
     setConfirmConfig({
       title: "Create New Document?",
-      message: "Are you sure you want to create a new file? Current work will be backed up to your history list.",
+      message: "Your current unsaved work will be backed up to your history list.\nCreate a new file?",
       onConfirm: () => {
         setDocName('Poem_Name');
         setCode('');
@@ -864,16 +1136,24 @@ export default function App() {
       <header className={`${pwa.needRefresh && !dismissedUpdate ? 'h-14 pt-0' : 'h-[calc(3.5rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)]'} ${themeClasses.headerBg} flex items-center justify-between px-2 sm:px-6 shadow-md shrink-0 select-none print:hidden z-30 relative`}>
         <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1 mr-4">
           
-          {/* Logo Button */}
-          <div
-            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-black text-base sm:text-lg text-white shrink-0 bg-emerald-600 shadow-md shadow-emerald-600/20 ring-1 ring-emerald-500/30 select-none"
+          {/* Logo Button spacer - the actual icon is <AppIconButton>, a single persistent
+              fixed-position element shared with LibraryScreen's top bar (see near the end of
+              this component's JSX), so its color can animate continuously between the two
+              instead of two separate buttons swapping instantly. This spacer just preserves the
+              layout gap it used to occupy. */}
+          <div className="w-8 h-8 sm:w-9 sm:h-9 shrink-0" aria-hidden="true" />
+
+          {/* App Title & Subtitle with 2-second Launch Fade Effect to Filename & Save Status.
+              Wiped away left-to-right when opening the Library (clip boundary sweeps from the
+              icon rightward), and revealed right-to-left when returning - the reverse sweep -
+              so the icon reads as a stable anchor while only this content changes past it. */}
+          <motion.div
+            className="relative flex items-center min-w-0 flex-1"
+            animate={{ clipPath: showLibrary ? 'inset(0 0 0 100%)' : 'inset(0 0 0 0%)' }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            style={{ pointerEvents: showLibrary ? 'none' : 'auto' }}
           >
-            H
-          </div>
-          
-          {/* App Title & Subtitle with 2-second Launch Fade Effect to Filename & Save Status */}
-          <div className="relative flex items-center min-w-0 flex-1">
-            {/* Launch Splash Title: "Hussayni Editor" (0 to 2s) */}
+            {/* Launch Splash Title: "Hussayni Editor" (0 to 2s, and again on return from Library) */}
             <div 
               className={`transition-all duration-700 ease-in-out select-none flex items-center ${
                 isSplashTitle 
@@ -881,7 +1161,7 @@ export default function App() {
                   : 'opacity-0 scale-95 pointer-events-none absolute left-0 top-1/2 -translate-y-1/2'
               }`}
             >
-              <h1 className="text-white font-extrabold text-xs sm:text-sm leading-tight tracking-wide whitespace-nowrap">
+              <h1 className="text-white font-extrabold text-sm sm:text-base leading-tight tracking-wide whitespace-nowrap">
                 Hussayni Editor
               </h1>
             </div>
@@ -906,196 +1186,84 @@ export default function App() {
                 placeholder="Poem_Name"
               />
             </div>
-          </div>
+          </motion.div>
         </div>
 
-        {/* Workspace Quick Actions */}
-        <div className={`flex items-center gap-1 sm:gap-1.5 shrink-0 transition-opacity duration-500 ${isSplashTitle ? 'opacity-90' : 'opacity-100'}`}>
-          
-          {/* Recent Document Selector Dropdown (Desktop) */}
-          {!isMobile && (
-            <div className="relative">
-              <button 
-                onClick={() => {
-                  setShowRecentMenu(!showRecentMenu);
-                  setShowFileMenu(false);
-                }}
-                className="px-2 py-1.5 sm:px-3 sm:py-1.5 hover:bg-white/10 rounded text-xs font-semibold transition-all duration-150 flex items-center gap-1.5 text-slate-200 cursor-pointer"
-                title="Switch to previously saved workbooks"
-              >
-                <History size={14} className="text-purple-400" />
-                <span className="hidden md:inline">History</span>
-                <ChevronDown size={11} className={`transition-transform duration-150 ${showRecentMenu ? 'rotate-180' : ''}`} />
-              </button>
-
-              {/* Recent Document Drafts Dropdown directly anchored under History button */}
-              {showRecentMenu && (
-                <div className="absolute top-full right-0 mt-1.5 w-64 sm:w-72 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-2.5 z-50 text-slate-200 select-none">
-                  <p className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
-                    <span>Recent Drafts ({recentDocs.length})</span>
-                    <button 
-                      onClick={() => setShowRecentMenu(false)}
-                      className="text-slate-500 hover:text-slate-300 text-xs px-1"
-                    >
-                      ✕
-                    </button>
-                  </p>
-                  <div className="mt-1.5 space-y-0.5 max-h-60 overflow-y-auto">
-                    {recentDocs.length === 0 ? (
-                      <p className="text-xs text-slate-500 p-3 text-center">No cached document logs found.</p>
-                    ) : (
-                      recentDocs.map((doc) => (
-                        <div 
-                          key={doc.id}
-                          onClick={() => handleLoadRecent(doc)}
-                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-left ${
-                            doc.name === docName ? 'bg-emerald-950/40 text-emerald-300' : 'hover:bg-white/5 text-slate-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 overflow-hidden">
-                             <FileText size={13} className="shrink-0 text-slate-500" />
-                            <div className="overflow-hidden">
-                              <p className="text-xs font-mono font-bold truncate">{doc.name}</p>
-                              <p className="text-[9px] text-slate-500">
-                                {new Date(doc.lastSaved).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </p>
-                            </div>
-                          </div>
-                          <button 
-                            onClick={(e) => handleDeleteRecent(doc.id, e)}
-                            className="p-1 hover:bg-white/10 rounded text-slate-500 hover:text-rose-400 cursor-pointer"
-                            title="Wipe record"
-                          >
-                            <Trash2 size={11} />
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+        {/* Workspace Quick Actions - fades/slides out in sync with the title/filename block's wipe
+            above. NOTE: intentionally NOT using clip-path here (unlike the title blocks) - this
+            wrapper contains the mobile File Actions dropdown, and clip-path on an ancestor clips
+            any overflowing descendant (like an open dropdown) even when the clip region matches
+            the box exactly, which made the dropdown invisible. */}
+        <motion.div
+          className="flex items-center gap-1 sm:gap-1.5 shrink-0"
+          animate={{
+            opacity: showLibrary ? 0 : (isSplashTitle ? 0.9 : 1),
+            x: showLibrary ? 16 : 0
+          }}
+          transition={{ duration: 0.25, ease: 'easeInOut' }}
+          style={{ pointerEvents: showLibrary ? 'none' : 'auto' }}
+        >
 
           <div className="h-4 w-px bg-slate-700 mx-0.5 sm:mx-1 hidden sm:block"></div>
 
           {isMobile ? (
             /* Collapsible Mobile Actions Dropdown */
-            <div className="relative">
-              <button 
-                onClick={() => {
-                  if (showRecentMenu) {
-                    setShowRecentMenu(false);
-                  } else {
-                    setShowFileMenu(!showFileMenu);
-                  }
-                }}
+            <div className="relative mobile-file-menu-wrapper">
+              <button
+                onClick={() => setShowFileMenu(!showFileMenu)}
                 className="p-1.5 min-[400px]:px-2 min-[400px]:py-1.5 hover:bg-white/10 rounded text-xs font-semibold transition-all duration-150 flex items-center gap-1 text-slate-200 cursor-pointer"
                 title="File Actions"
               >
                 <MoreVertical size={14} className="text-slate-400" />
                 <span className="hidden min-[400px]:inline">File</span>
-                <ChevronDown size={11} className={`transition-transform duration-150 ${showFileMenu || showRecentMenu ? 'rotate-180' : ''} hidden min-[400px]:inline`} />
+                <ChevronDown size={11} className={`transition-transform duration-150 ${showFileMenu ? 'rotate-180' : ''} hidden min-[400px]:inline`} />
               </button>
-              {showFileMenu && (
-                <div className="absolute top-10 right-0 w-36 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-1 z-50 text-slate-200 select-none">
-                  <button
-                    onClick={() => {
-                      handleNew();
-                      setShowFileMenu(false);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-white/10 rounded-lg text-xs font-semibold transition-all duration-150 flex items-center gap-2 cursor-pointer text-slate-200"
+              <AnimatePresence>
+                {showFileMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    className="absolute top-10 right-0 w-36 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-1 z-50 text-slate-200 select-none"
                   >
-                    <Plus size={14} className="text-emerald-400" />
-                    <span>New</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      handleOpenClick();
-                      setShowFileMenu(false);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-white/10 rounded-lg text-xs font-semibold transition-all duration-150 flex items-center gap-2 cursor-pointer text-slate-200"
-                  >
-                    <FolderOpen size={14} className="text-blue-400" />
-                    <span>Open</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      handleSaveSource();
-                      setShowFileMenu(false);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-white/10 rounded-lg text-xs font-semibold transition-all duration-150 flex items-center gap-2 cursor-pointer text-slate-200"
-                  >
-                    <Save size={14} className="text-amber-400" />
-                    <span>Save</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowRecentMenu(true);
-                      setShowFileMenu(false);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-white/10 rounded-lg text-xs font-semibold transition-all duration-150 flex items-center gap-2 cursor-pointer text-slate-200"
-                  >
-                    <History size={14} className="text-purple-400" />
-                    <span>History</span>
-                  </button>
-                </div>
-              )}
-              {showRecentMenu && (
-                <div className="absolute top-10 right-0 w-64 sm:w-72 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-2.5 z-50 text-slate-200 select-none">
-                  <p className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
-                    <span>Recent Drafts ({recentDocs.length})</span>
-                    <button 
-                      onClick={() => setShowRecentMenu(false)}
-                      className="text-slate-500 hover:text-slate-300 text-xs px-1 cursor-pointer"
+                    <button
+                      onClick={() => {
+                        handleNew();
+                        setShowFileMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-white/10 rounded-lg text-xs font-semibold transition-all duration-150 flex items-center gap-2 cursor-pointer text-slate-200"
                     >
-                      ✕
+                      <Plus size={14} className="text-emerald-400" />
+                      <span>New</span>
                     </button>
-                  </p>
-                  <div className="mt-1.5 space-y-0.5 max-h-60 overflow-y-auto">
-                    {recentDocs.length === 0 ? (
-                      <p className="text-xs text-slate-500 p-3 text-center">No cached document logs found.</p>
-                    ) : (
-                      recentDocs.map((doc) => (
-                        <div 
-                          key={doc.id}
-                          onClick={() => {
-                            handleLoadRecent(doc);
-                            setShowRecentMenu(false);
-                          }}
-                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-left ${
-                            doc.name === docName ? 'bg-emerald-950/40 text-emerald-300' : 'hover:bg-white/5 text-slate-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 overflow-hidden">
-                             <FileText size={13} className="shrink-0 text-slate-500" />
-                            <div className="overflow-hidden">
-                              <p className="text-xs font-mono font-bold truncate">{doc.name}</p>
-                              <p className="text-[9px] text-slate-500">
-                                {new Date(doc.lastSaved).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </p>
-                            </div>
-                          </div>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteRecent(doc.id, e);
-                            }}
-                            className="p-1 hover:bg-white/10 rounded text-slate-500 hover:text-rose-400 cursor-pointer"
-                            title="Wipe record"
-                          >
-                            <Trash2 size={11} />
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
+                    <button
+                      onClick={() => {
+                        handleOpenClick();
+                        setShowFileMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-white/10 rounded-lg text-xs font-semibold transition-all duration-150 flex items-center gap-2 cursor-pointer text-slate-200"
+                    >
+                      <FolderOpen size={14} className="text-blue-400" />
+                      <span>Open</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowSaveToLibraryDialog(true);
+                        setShowFileMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-white/10 rounded-lg text-xs font-semibold transition-all duration-150 flex items-center gap-2 cursor-pointer text-slate-200"
+                    >
+                      <Save size={14} className="text-amber-400" />
+                      <span>Save</span>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           ) : (
             <>
-              <button 
+              <button
                 onClick={handleNew}
                 className="px-2 py-1.5 sm:px-3 sm:py-1.5 hover:bg-white/10 rounded text-xs font-semibold transition-all duration-150 flex items-center gap-1.5 text-slate-200 cursor-pointer"
                 title="Create a fresh workbook canvas"
@@ -1103,8 +1271,8 @@ export default function App() {
                 <Plus size={14} className="text-emerald-400" />
                 <span className="hidden sm:inline">New</span>
               </button>
-              
-              <button 
+
+              <button
                 onClick={handleOpenClick}
                 className="px-2 py-1.5 sm:px-3 sm:py-1.5 hover:bg-white/10 rounded text-xs font-semibold transition-all duration-150 flex items-center gap-1.5 text-slate-200 cursor-pointer"
                 title="Upload custom text file with Hussayni tags"
@@ -1113,10 +1281,10 @@ export default function App() {
                 <span className="hidden sm:inline">Open</span>
               </button>
 
-              <button 
-                onClick={handleSaveSource}
+              <button
+                onClick={() => setShowSaveToLibraryDialog(true)}
                 className="px-2 py-1.5 sm:px-3 sm:py-1.5 hover:bg-white/10 rounded text-xs font-semibold transition-all duration-150 flex items-center gap-1.5 text-slate-200 cursor-pointer"
-                title="Download source text file markup directly"
+                title="Save this poem to the Hussayni Library (requires poem name, poet name, and date)"
               >
                 <Save size={14} className="text-amber-400" />
                 <span className="hidden sm:inline">Save</span>
@@ -1191,7 +1359,7 @@ export default function App() {
           >
             <SettingsIcon size={17} />
           </button>
-        </div>
+        </motion.div>
       </header>
 
       {/* MAIN WORKSPACE CONTENT */}
@@ -1465,6 +1633,8 @@ export default function App() {
                 rightFooterText={rightFooterText}
                 showPageNumber={preferences.showPageNumber !== false}
                 footerFontSize={preferences.footerFontSize || 14}
+                useArabicNumerals={preferences.useArabicNumerals}
+                paragraphSpacing={preferences.paragraphSpacing}
               />
             );
           })()}
@@ -1646,22 +1816,29 @@ export default function App() {
                 </div>
 
                 {/* Paragraph Spacing */}
-                <div className="space-y-1.5 pt-1">
-                  <span className="text-xs font-bold text-slate-800 block">Paragraph Spacing</span>
-                  <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl">
-                    {['compact', 'normal', 'relaxed'].map((sp) => (
-                      <button
-                        key={sp}
-                        onClick={() => setPreferences(p => ({ ...p, paragraphSpacing: sp as any }))}
-                        className={`py-1.5 rounded-lg text-xs font-extrabold uppercase transition-all cursor-pointer ${
-                          preferences.paragraphSpacing === sp 
-                            ? 'bg-white text-emerald-700 shadow-2xs border border-slate-200/80' 
-                            : 'text-slate-500 hover:text-slate-800'
-                        }`}
-                      >
-                        {sp}
-                      </button>
-                    ))}
+                <div className="flex items-center justify-between py-1">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-800">Paragraph Spacing</span>
+                    <span className="text-[10px] text-slate-400">Line gap multiplier</span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, paragraphSpacing: Math.max(0.7, parseFloat(((p.paragraphSpacing || 1.0) - 0.1).toFixed(1))) }))}
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
+                    >
+                      <Minus size={13} />
+                    </button>
+                    <span className="text-xs font-extrabold text-slate-800 text-center px-1 min-w-[42px]">
+                      {(preferences.paragraphSpacing || 1.0).toFixed(1)}x
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, paragraphSpacing: Math.min(2.5, parseFloat(((p.paragraphSpacing || 1.0) + 0.1).toFixed(1))) }))}
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
+                    >
+                      <Plus size={13} />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1797,6 +1974,38 @@ export default function App() {
                       className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center transition-all cursor-pointer border border-slate-200 text-sm select-none"
                     >
                       <Plus size={13} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Numeral Style */}
+                <div className="flex items-center justify-between pt-2.5 border-t border-slate-100">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-800">Numeral Style</span>
+                    <span className="text-[10px] text-slate-400">Digits used in dates & page numbers</span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, useArabicNumerals: false }))}
+                      className={`px-5 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                        !preferences.useArabicNumerals
+                          ? 'bg-white text-emerald-700 shadow-2xs border border-slate-200/80'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      123
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreferences(p => ({ ...p, useArabicNumerals: true }))}
+                      className={`px-5 py-1.5 rounded-lg text-sm font-extrabold transition-all cursor-pointer ${
+                        preferences.useArabicNumerals
+                          ? 'bg-white text-emerald-700 shadow-2xs border border-slate-200/80'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      ١٢٣
                     </button>
                   </div>
                 </div>
@@ -2068,7 +2277,7 @@ export default function App() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 12 }}
               transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-              className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100 flex flex-col"
+              className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
             {/* Header */}
@@ -2162,7 +2371,8 @@ export default function App() {
                 </div>
               )}
 
-              {/* Option C: Header Only Slide Images (PNG / JPG) */}
+              {/* Option C: Header Only Slide Images (PNG / JPG) - only relevant in Header Mode */}
+              {preferences.outputMode === 'H' && (
               <div className="border-2 border-emerald-300 hover:border-emerald-500 bg-emerald-50/20 p-4 rounded-xl transition-all duration-150 flex items-start gap-3.5 shadow-2xs">
                 <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0 select-none">
                   <Image size={18} />
@@ -2211,6 +2421,27 @@ export default function App() {
                       <span>JPG{extractedHeaders.length > 1 ? '(s)' : ''}</span>
                     </button>
                   </div>
+                </div>
+              </div>
+              )}
+
+              {/* Option D: Raw Source Markup (.txt) */}
+              <div className="border-2 border-amber-300 hover:border-amber-500 bg-amber-50/20 p-4 rounded-xl transition-all duration-150 flex items-start gap-3.5 shadow-2xs">
+                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shrink-0 select-none">
+                  <Save size={18} />
+                </div>
+                <div className="flex-grow min-w-0">
+                  <h4 className="font-extrabold text-sm text-slate-900">Source Markup</h4>
+                  <button
+                    onClick={() => {
+                      handleSaveSource();
+                      setShowExportModal(false);
+                    }}
+                    className="mt-3 bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <Download size={12} />
+                    <span>.txt</span>
+                  </button>
                 </div>
               </div>
 
@@ -2414,7 +2645,7 @@ export default function App() {
               onClick={(e) => e.stopPropagation()}
             >
             <h3 className="text-sm font-bold tracking-tight mb-2">{confirmConfig.title}</h3>
-            <p className="text-xs text-slate-500 mb-4 leading-relaxed">{confirmConfig.message}</p>
+            <p className="text-xs text-slate-500 mb-4 leading-relaxed whitespace-pre-line">{confirmConfig.message}</p>
             <div className="flex items-center justify-end gap-2.5">
               <button
                 onClick={() => setConfirmConfig(null)}
@@ -2471,6 +2702,84 @@ export default function App() {
         preferences={preferences}
         setPreferences={setPreferences}
       />
+
+      {/* Shared persistent app icon - see AppIconButton.tsx for why this is one element instead
+          of the two separate buttons the Editor header and LibraryScreen used to each render */}
+      <AppIconButton
+        showLibrary={showLibrary}
+        onOpenLibrary={handleOpenLibrary}
+        onCloseLibrary={() => setShowLibrary(false)}
+        libraryIconGlow={libraryIconGlow}
+      />
+
+      {/* HUSSAYNI LIBRARY (local, offline archive of saved/unsaved poems) */}
+      {/* The top bar inside LibraryScreen intentionally has no enter/exit
+          animation of its own (renders/removes instantly with this wrapper);
+          only its content area (tabs + list) animates - see LibraryScreen.tsx.
+          onExitComplete restores the scrollbar only once that animation (and
+          this whole screen's removal) has actually finished. */}
+      <AnimatePresence onExitComplete={() => { document.body.style.overflow = ''; }}>
+        {showLibrary && (
+          <div key="library-screen">
+            <LibraryScreen
+              savedPoems={savedPoems}
+              unsavedPoems={recentDocs}
+              deletedPoems={deletedPoems}
+              activeDocName={docName}
+              onOpenPreview={handleOpenLibraryPreview}
+              onOpenInEditor={handleOpenLibraryDocInEditor}
+              onDelete={handleDeleteLibraryDoc}
+              onExportDocx={handleExportLibraryDocx}
+              onExportPdf={handleExportLibraryPdf}
+              onRename={(doc, list) => setRenameTarget({ doc, list })}
+              onRestore={handleRestoreDeletedDoc}
+              onPermanentDelete={handlePermanentlyDeleteDoc}
+            />
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* LIBRARY POEM READ-ONLY PREVIEW */}
+      {previewDoc && (
+        <PoemPreviewScreen
+          doc={previewDoc}
+          pages={previewPages}
+          preferences={preferences}
+          onClose={() => setPreviewDoc(null)}
+          onOpenInEditor={() => handleOpenLibraryDocInEditor(previewDoc)}
+          onExportDocx={() => handleExportLibraryDocx(previewDoc)}
+          onExportPdf={handleExportPreviewPdf}
+        />
+      )}
+
+      {/* SAVE TO LIBRARY CONFIRMATION DIALOG */}
+      <AnimatePresence>
+        {showSaveToLibraryDialog && (
+          <SaveToLibraryDialog
+            key="save-to-library-dialog"
+            docName={docName}
+            onChangeName={setDocName}
+            poetName={rightFooterText}
+            onChangePoet={setRightFooterText}
+            dateText={leftFooterText}
+            onChangeDate={setLeftFooterText}
+            onClose={() => setShowSaveToLibraryDialog(false)}
+            onSaveDraft={saveCurrentDraftToLibrary}
+            onSaveComplete={saveCurrentDraftToLibrary}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* RENAME / EDIT METADATA DIALOG (for Library poems, no need to open them in the editor) */}
+      {renameTarget && (
+        <RenamePoemDialog
+          docName={renameTarget.doc.name}
+          poetName={renameTarget.doc.rightFooter || ''}
+          dateText={renameTarget.doc.leftFooter || ''}
+          onClose={() => setRenameTarget(null)}
+          onSave={handleRenamePoem}
+        />
+      )}
 
     </div>
   );

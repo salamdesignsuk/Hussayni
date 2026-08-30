@@ -80,10 +80,9 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
         const next = Math.min(2.5, Math.max(0.8, parseFloat((cur + delta * 0.1).toFixed(1))));
         return { ...p, headerLineSpacing: next };
       } else {
-        const spacingOptions: Array<'compact' | 'normal' | 'relaxed'> = ['compact', 'normal', 'relaxed'];
-        const curIdx = spacingOptions.indexOf(p.paragraphSpacing || 'normal');
-        const nextIdx = Math.min(2, Math.max(0, curIdx + delta));
-        return { ...p, paragraphSpacing: spacingOptions[nextIdx] };
+        const cur = p.paragraphSpacing || 1.0;
+        const next = Math.min(2.5, Math.max(0.7, parseFloat((cur + delta * 0.1).toFixed(1))));
+        return { ...p, paragraphSpacing: next };
       }
     });
   };
@@ -112,9 +111,9 @@ export const MobilePreviewToolbar: React.FC<MobilePreviewToolbarProps> = ({
     ? `${preferences.headerFontSize || 145}` 
     : `${preferences.maxFontSize || 26}`;
 
-  const spacingBtnValue = isHeaderMode 
-    ? `${(preferences.headerLineSpacing || 1.2).toFixed(1)}x` 
-    : (preferences.paragraphSpacing === 'compact' ? 'Compact' : preferences.paragraphSpacing === 'relaxed' ? 'Relaxed' : 'Normal');
+  const spacingBtnValue = isHeaderMode
+    ? `${(preferences.headerLineSpacing || 1.2).toFixed(1)}x`
+    : `${(preferences.paragraphSpacing || 1.0).toFixed(1)}x`;
 
   const zoomBtnValue = `${currentZoom}%`;
 

@@ -71,13 +71,8 @@ export async function paginateDocument(
   const PRINTABLE_HEIGHT = printableAreaEl.clientHeight;
   const printableAreaRect = printableAreaEl.getBoundingClientRect();
 
-  // Spacing multiplier based on paragraph spacing setting
-  let spacingMultiplier = 1.0;
-  if (preferences.paragraphSpacing === 'compact') {
-    spacingMultiplier = 0.7;
-  } else if (preferences.paragraphSpacing === 'relaxed') {
-    spacingMultiplier = 1.3;
-  }
+  // Spacing multiplier based on paragraph spacing setting (0.7x - 2.5x)
+  const spacingMultiplier = preferences.paragraphSpacing || 1.0;
 
   // Helper to build and render candidate HTML into the measure container
   const checkPageFits = (
@@ -87,15 +82,18 @@ export async function paginateDocument(
     lineBreakSize: number
   ): { fits: boolean; hasHorizontalOverflow: boolean; hasVerticalOverflow: boolean; overflowingLines: number[] } => {
     let contentHtml = '';
-    const breakSizePt = Math.round(lineBreakSize * spacingMultiplier);
+    const gapPt = lineBreakSize;
+    // Paragraph spacing is the line-height of body text only - header/footer
+    // lines and the blank-line gaps are unaffected.
+    const bodyLineHeight = 1.3 * spacingMultiplier;
 
-    const renderLinesHtml = (text: string, isBold: boolean, lineIndex: number, color: string): string => {
+    const renderLinesHtml = (text: string, isBold: boolean, lineIndex: number, color: string, lineHeight: number = 1.3): string => {
       const lines = text.split('\n');
       return lines.map((lineText, idx) => {
         const currentLineNum = lineIndex + idx;
         const lineContent = lineText.trim() === '' ? '&nbsp;' : lineText;
         return `
-          <p class="hussayni-para" data-line="${currentLineNum}" style="font-family: Arial, sans-serif; font-size: ${fontSize}pt; line-height: 1.3; font-weight: ${isBold ? 'bold' : 'normal'}; margin: 0; padding: 0; text-align: center; color: ${color}; direction: rtl; white-space: nowrap; overflow: visible; width: 100%;">
+          <p class="hussayni-para" data-line="${currentLineNum}" style="font-family: Arial, sans-serif; font-size: ${fontSize}pt; line-height: ${lineHeight}; font-weight: ${isBold ? 'bold' : 'normal'}; margin: 0; padding: 0; text-align: center; color: ${color}; direction: rtl; white-space: nowrap; overflow: visible; width: 100%;">
             <span class="hussayni-line-span" style="display: inline-block; white-space: nowrap;">${lineContent}</span>
           </p>
         `;
@@ -107,7 +105,7 @@ export async function paginateDocument(
       const headerLine = pairs[0] ? pairs[0].bodyLineIndex || 1 : 1;
       contentHtml += renderLinesHtml(headerText, true, headerLine, '#000000');
       contentHtml += `
-        <p style="font-family: Arial, sans-serif; font-size: ${breakSizePt}pt; line-height: 1.3; margin: 0; padding: 0; text-align: center;">&nbsp;</p>
+        <p style="font-family: Arial, sans-serif; font-size: ${gapPt}pt; line-height: 1.3; margin: 0; padding: 0; text-align: center;">&nbsp;</p>
       `;
     }
 
@@ -115,15 +113,15 @@ export async function paginateDocument(
     pairs.forEach((pair, idx) => {
       if (idx > 0) {
         // Gap spacer between pairs
-        contentHtml += `<p style="font-family: Arial, sans-serif; font-size: ${breakSizePt}pt; line-height: 1.3; margin: 0; padding: 0; text-align: center;">&nbsp;</p>`;
+        contentHtml += `<p style="font-family: Arial, sans-serif; font-size: ${gapPt}pt; line-height: 1.3; margin: 0; padding: 0; text-align: center;">&nbsp;</p>`;
       }
 
-      // Body text
-      contentHtml += renderLinesHtml(pair.body, false, pair.bodyLineIndex, '#1e293b');
+      // Body text - line-height scales with paragraph spacing
+      contentHtml += renderLinesHtml(pair.body, false, pair.bodyLineIndex, '#1e293b', bodyLineHeight);
 
       if (pair.footer) {
         // Spacer between body and footer
-        contentHtml += `<p style="font-family: Arial, sans-serif; font-size: ${breakSizePt}pt; line-height: 1.3; margin: 0; padding: 0; text-align: center;">&nbsp;</p>`;
+        contentHtml += `<p style="font-family: Arial, sans-serif; font-size: ${gapPt}pt; line-height: 1.3; margin: 0; padding: 0; text-align: center;">&nbsp;</p>`;
 
         // Footer text
         contentHtml += renderLinesHtml(pair.footer, true, pair.footerLineIndex, '#0f172a');
@@ -220,7 +218,7 @@ export async function paginateDocument(
 
       const item1 = documentItems[i] as { type: 'pair'; data: BodyFooterPair };
       const pair1 = item1.data;
-      const activeHeader = pair1.activeHeader || "بسم الله الرحمن الرحيم";
+      const activeHeader = pair1.activeHeader;
 
       let canPair = false;
       let pair2: BodyFooterPair | null = null;

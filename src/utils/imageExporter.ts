@@ -96,7 +96,7 @@ export async function exportSingleHeaderImage(
  * Exports all header slides as individual PNG or JPG image downloads.
  */
 export async function exportAllHeaderImages(options: HeaderExportOptions) {
-  const displayHeaders = options.headers.length > 0 ? options.headers : [options.docName || 'عنوان القصيدة'];
+  const displayHeaders = options.headers.length > 0 ? options.headers : (options.docName ? [options.docName] : []);
 
   for (let i = 0; i < displayHeaders.length; i++) {
     await exportSingleHeaderImage(displayHeaders[i], i, options);
